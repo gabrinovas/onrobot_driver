@@ -1,9 +1,8 @@
+# onrobot_driver/drivers/ethercat_client.py
 import socket
 import struct
-import threading
 import time
-from typing import Optional, Tuple
-import logging
+from typing import Optional
 
 class EthercatClient:
     """
@@ -17,7 +16,6 @@ class EthercatClient:
         self.timeout = timeout
         self.socket: Optional[socket.socket] = None
         self.is_connected = False
-        self.logger = logging.getLogger('EthercatClient')
         
     def connect(self) -> bool:
         """Connect to the OnRobot Compute Box"""
@@ -26,10 +24,10 @@ class EthercatClient:
             self.socket.settimeout(self.timeout)
             self.socket.connect((self.ip, self.port))
             self.is_connected = True
-            self.logger.info(f"Connected to OnRobot Compute Box at {self.ip}:{self.port}")
+            print(f"Connected to OnRobot Compute Box at {self.ip}:{self.port}")
             return True
         except Exception as e:
-            self.logger.error(f"Failed to connect to {self.ip}:{self.port} - {e}")
+            print(f"Failed to connect to {self.ip}:{self.port} - {e}")
             self.is_connected = False
             return False
     
