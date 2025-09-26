@@ -3,8 +3,6 @@
 import rclpy
 from rclpy.node import Node
 from rclpy.executors import MultiThreadedExecutor
-import threading
-import time
 
 from onrobot_driver.drivers.onrobot_gripper import OnRobotGripper
 
@@ -12,25 +10,24 @@ class OnRobotDriverNode(Node):
     def __init__(self):
         super().__init__('onrobot_driver_node')
         
-        # Get gripper type parameter
-        self.declare_parameter('gripper_type', '2FG7')
-        gripper_type = self.get_parameter('gripper_type').value
+        # Declare parameters FIRST, before creating the gripper
+        self.declare_parameters(
+            namespace='',
+            parameters=[
+                ('gripper_type', '2FG7'),
+                ('ip_address', '192.168.1.1'),
+                ('port', 502),
+                ('max_width', 0.085),
+                ('min_width', 0.0),
+                ('max_force', 100.0),
+                ('update_rate', 100.0),
+            ]
+        )
         
-        # Initialize gripper controller
-        self.gripper = OnRobotGripper(self, gripper_type)
+        # Now initialize gripper controller
+        self.gripper = OnRobotGripper(self)
         
-        # Create timer for status updates
-        update_rate = self.gripper.update_rate
-        self.timer = self.create_timer(1.0/update_rate, self.timer_callback)
-        
-        self.get_logger().info(f"OnRobot {gripper_type} driver node started")
-    
-    def timer_callback(self):
-        """Timer callback for periodic status updates"""
-        try:
-            self.gripper.publish_status()
-        except Exception as e:
-            self.get_logger().error(f"Error in timer callback: {e}")
+        self.get_logger().info(f"OnRobot driver node started with gripper_type: {self.get_parameter('gripper_type').value}")
     
     def destroy_node(self):
         """Cleanup before shutdown"""
