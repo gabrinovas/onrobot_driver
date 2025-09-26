@@ -6,8 +6,8 @@ from typing import Optional
 
 class EthercatClient:
     """
-    Ethernet client for communicating with OnRobot Compute Box
-    Uses TCP/IP protocol to communicate with the Compute Box at 192.168.1.1
+    Simple TCP client for OnRobot Compute Box communication
+    Uses standard socket library - no external dependencies needed
     """
     
     def __init__(self, ip: str = "192.168.1.1", port: int = 502, timeout: float = 2.0):
@@ -35,44 +35,23 @@ class EthercatClient:
         """Disconnect from the Compute Box"""
         if self.socket:
             self.socket.close()
-            self.socket = None
         self.is_connected = False
-        self.logger.info("Disconnected from OnRobot Compute Box")
     
     def send_command(self, command: bytes, expect_response: bool = True) -> Optional[bytes]:
-        """
-        Send command to gripper and optionally receive response
-        
-        Args:
-            command: Command bytes to send
-            expect_response: Whether to wait for response
-            
-        Returns:
-            Response bytes or None if no response expected or error
-        """
-        if not self.is_connected or not self.socket:
-            self.logger.error("Not connected to Compute Box")
+        """Send command and receive response"""
+        if not self.is_connected:
             return None
         
         try:
-            # Send command
             self.socket.sendall(command)
-            
             if expect_response:
-                # Receive response (adjust size based on your protocol)
-                response = self.socket.recv(1024)
-                return response
-            else:
-                return None
-                
-        except socket.timeout:
-            self.logger.error("Socket timeout while sending command")
+                return self.socket.recv(1024)
             return None
         except Exception as e:
-            self.logger.error(f"Error sending command: {e}")
+            print(f"Error sending command: {e}")
             self.is_connected = False
             return None
-    
+            
     def read_status(self) -> Optional[bytes]:
         """Read status from gripper"""
         # Modify this based on OnRobot's specific status reading protocol
