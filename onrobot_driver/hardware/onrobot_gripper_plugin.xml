@@ -2,7 +2,7 @@
 <library path="onrobot_driver">
   <class name="onrobot_driver/OnRobotGripperHardwareInterface"
          type="onrobot_driver.hardware.onrobot_gripper_hardware_interface.OnRobotGripperHardwareInterface"
-         base_class_type="hardware_interface.system_interface.SystemInterface">
+         base_class_type="hardware_interface.SystemInterface">
     <description>
       OnRobot Gripper Hardware Interface for ROS2 Control
     </description>

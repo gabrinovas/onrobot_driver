@@ -7,9 +7,9 @@ from threading import Lock
 import time
 
 from control_msgs.action import GripperCommand
-from hardware_interface.system_interface import SystemInterface
-from hardware_interface.types import COMMAND_INTERFACES, STATE_INTERFACES
-from hardware_interface.hardware_info import HardwareInfo
+
+# Correct imports for ROS2 Humble
+from hardware_interface import SystemInterface
 from hardware_interface import CallbackReturn
 
 class OnRobotGripperHardwareInterface(SystemInterface):
@@ -38,7 +38,7 @@ class OnRobotGripperHardwareInterface(SystemInterface):
         self.min_width_ = 0.0
         self.max_force_ = 100.0
         
-    def on_init(self, hardware_info: HardwareInfo) -> CallbackReturn:
+    def on_init(self, info):
         """
         Initialize the hardware interface
         """
@@ -50,12 +50,13 @@ class OnRobotGripperHardwareInterface(SystemInterface):
             self.node_ = Node('onrobot_gripper_hardware_interface')
             
             # Get parameters from hardware info
-            self.ip_address_ = hardware_info.hardware_parameters.get('ip_address', '192.168.1.1')
-            self.port_ = int(hardware_info.hardware_parameters.get('port', '502'))
-            self.gripper_type_ = hardware_info.hardware_parameters.get('gripper_type', '2FG7')
-            self.max_width_ = float(hardware_info.hardware_parameters.get('max_width', '0.085'))
-            self.min_width_ = float(hardware_info.hardware_parameters.get('min_width', '0.0'))
-            self.max_force_ = float(hardware_info.hardware_parameters.get('max_force', '100.0'))
+            if hasattr(info, 'hardware_parameters'):
+                self.ip_address_ = info.hardware_parameters.get('ip_address', '192.168.1.1')
+                self.port_ = int(info.hardware_parameters.get('port', '502'))
+                self.gripper_type_ = info.hardware_parameters.get('gripper_type', '2FG7')
+                self.max_width_ = float(info.hardware_parameters.get('max_width', '0.085'))
+                self.min_width_ = float(info.hardware_parameters.get('min_width', '0.0'))
+                self.max_force_ = float(info.hardware_parameters.get('max_force', '100.0'))
             
             # Initialize action client for OnRobot driver
             self.gripper_action_client_ = ActionClient(
@@ -74,7 +75,7 @@ class OnRobotGripperHardwareInterface(SystemInterface):
                 self.node_.get_logger().error(f"Error initializing hardware interface: {e}")
             return CallbackReturn.ERROR
     
-    def on_configure(self, previous_state: str) -> CallbackReturn:
+    def on_configure(self, previous_state):
         """
         Configure the hardware interface
         """
@@ -85,7 +86,7 @@ class OnRobotGripperHardwareInterface(SystemInterface):
             self.node_.get_logger().error(f"Error configuring hardware interface: {e}")
             return CallbackReturn.ERROR
     
-    def on_cleanup(self) -> CallbackReturn:
+    def on_cleanup(self):
         """
         Cleanup the hardware interface
         """
@@ -99,7 +100,7 @@ class OnRobotGripperHardwareInterface(SystemInterface):
             print(f"Error cleaning up hardware interface: {e}")
             return CallbackReturn.ERROR
     
-    def on_activate(self, previous_state: str) -> CallbackReturn:
+    def on_activate(self, previous_state):
         """
         Activate the hardware interface
         """
@@ -115,7 +116,7 @@ class OnRobotGripperHardwareInterface(SystemInterface):
             self.node_.get_logger().error(f"Error activating hardware interface: {e}")
             return CallbackReturn.ERROR
     
-    def on_deactivate(self, previous_state: str) -> CallbackReturn:
+    def on_deactivate(self, previous_state):
         """
         Deactivate the hardware interface
         """
@@ -126,19 +127,21 @@ class OnRobotGripperHardwareInterface(SystemInterface):
             self.node_.get_logger().error(f"Error deactivating hardware interface: {e}")
             return CallbackReturn.ERROR
     
-    def on_error(self, previous_state: str) -> CallbackReturn:
+    def on_error(self, previous_state):
         """
         Handle errors
         """
-        self.node_.get_logger().error("OnRobot Gripper Hardware Interface entered error state")
+        if self.node_:
+            self.node_.get_logger().error("OnRobot Gripper Hardware Interface entered error state")
         return CallbackReturn.SUCCESS
     
-    def on_shutdown(self, previous_state: str) -> CallbackReturn:
+    def on_shutdown(self, previous_state):
         """
         Shutdown the hardware interface
         """
         try:
-            self.node_.get_logger().info("Shutting down OnRobot Gripper Hardware Interface")
+            if self.node_:
+                self.node_.get_logger().info("Shutting down OnRobot Gripper Hardware Interface")
             return CallbackReturn.SUCCESS
         except Exception as e:
             print(f"Error shutting down hardware interface: {e}")
@@ -194,7 +197,8 @@ class OnRobotGripperHardwareInterface(SystemInterface):
             return CallbackReturn.SUCCESS
             
         except Exception as e:
-            self.node_.get_logger().error(f"Error reading from hardware: {e}")
+            if self.node_:
+                self.node_.get_logger().error(f"Error reading from hardware: {e}")
             return CallbackReturn.ERROR
     
     def write(self):
@@ -211,7 +215,8 @@ class OnRobotGripperHardwareInterface(SystemInterface):
             return CallbackReturn.SUCCESS
             
         except Exception as e:
-            self.node_.get_logger().error(f"Error writing to hardware: {e}")
+            if self.node_:
+                self.node_.get_logger().error(f"Error writing to hardware: {e}")
             return CallbackReturn.ERROR
     
     def send_gripper_command(self, position):
@@ -230,9 +235,12 @@ class OnRobotGripperHardwareInterface(SystemInterface):
                 # For now, we don't wait for result to avoid blocking
                 # In production, you might want to handle this differently
                 
-                self.node_.get_logger().debug(f"Sent gripper command: position={position}")
+                if self.node_:
+                    self.node_.get_logger().debug(f"Sent gripper command: position={position}")
             else:
-                self.node_.get_logger().warn("Gripper action server not available, command not sent")
+                if self.node_:
+                    self.node_.get_logger().warn("Gripper action server not available, command not sent")
                 
         except Exception as e:
-            self.node_.get_logger().error(f"Error sending gripper command: {e}")
+            if self.node_:
+                self.node_.get_logger().error(f"Error sending gripper command: {e}")
