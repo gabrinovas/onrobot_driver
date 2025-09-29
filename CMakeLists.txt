@@ -36,9 +36,10 @@ install(PROGRAMS
   DESTINATION lib/${PROJECT_NAME}
 )
 
-# Install Python modules (only the main node for now)
+# Install Python modules
 install(PROGRAMS
   ${PROJECT_NAME}/nodes/onrobot_driver_node.py
+  ${PROJECT_NAME}/nodes/gripper_action_server.py  # ADD THIS LINE
   DESTINATION lib/${PROJECT_NAME}
 )
 
