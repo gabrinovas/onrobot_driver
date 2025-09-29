@@ -40,6 +40,7 @@ install(PROGRAMS
 install(PROGRAMS
   ${PROJECT_NAME}/nodes/onrobot_driver_node.py
   ${PROJECT_NAME}/nodes/gripper_action_server.py  # ADD THIS LINE
+  ${PROJECT_NAME}/nodes/gripper_command_publisher.py  # ADD THIS LINE
   DESTINATION lib/${PROJECT_NAME}
 )
 
