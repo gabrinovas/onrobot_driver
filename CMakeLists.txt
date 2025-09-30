@@ -39,8 +39,8 @@ install(PROGRAMS
 # Install Python modules
 install(PROGRAMS
   ${PROJECT_NAME}/nodes/onrobot_driver_node.py
-  ${PROJECT_NAME}/nodes/gripper_action_server.py  # ADD THIS LINE
-  ${PROJECT_NAME}/nodes/gripper_command_publisher.py  # ADD THIS LINE
+  ${PROJECT_NAME}/nodes/gripper_command_publisher.py
+  ${PROJECT_NAME}/nodes/gripper_action_bridge.py
   DESTINATION lib/${PROJECT_NAME}
 )
 
