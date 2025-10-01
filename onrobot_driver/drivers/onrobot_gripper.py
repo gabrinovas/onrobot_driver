@@ -8,7 +8,7 @@ from std_msgs.msg import Bool, Float32
 from sensor_msgs.msg import JointState
 from control_msgs.action import GripperCommand
 
-from .ethercat_client import EthercatClient, ModbusTCPClient
+from .modbus_client import ModbusTCPClient  # Changed to Modbus only
 
 class OnRobotGripper:
     """
@@ -19,7 +19,7 @@ class OnRobotGripper:
         self.node = node
         self.logger = node.get_logger()
         
-        # Get parameters from the node (already declared)
+        # Get parameters
         self.gripper_type = self.node.get_parameter('gripper_type').value
         self.ip_address = self.node.get_parameter('ip_address').value
         self.port = self.node.get_parameter('port').value
@@ -35,7 +35,7 @@ class OnRobotGripper:
         self.is_moving = False
         self.lock = Lock()
         
-        # Communication client
+        # Communication client - Use Modbus TCP for OnRobot
         self.client = None
         
         # ROS2 interfaces
@@ -48,20 +48,19 @@ class OnRobotGripper:
         self.logger.info(f"IP: {self.ip_address}, Max width: {self.max_width}m")
     
     def setup_communication(self):
-        """Setup communication with Compute Box"""
+        """Setup communication with Compute Box using Modbus TCP"""
         if self.ip_address == "127.0.0.1":
             self.logger.info("Running in simulation mode (localhost)")
             return
             
         try:
-            # Try Modbus TCP first
             self.client = ModbusTCPClient(self.ip_address, self.port)
             
             if not self.client.connect():
-                self.logger.warning("Modbus TCP connection failed, trying raw Ethernet")
-                self.client = EthercatClient(self.ip_address, self.port)
-                if not self.client.connect():
-                    self.logger.warning("Failed to connect to Compute Box - running in simulation mode")
+                self.logger.warning("Failed to connect to Compute Box - running in simulation mode")
+                self.client = None
+            else:
+                self.logger.info("Successfully connected to OnRobot Compute Box via Modbus TCP")
                     
         except Exception as e:
             self.logger.error(f"Communication setup failed: {e}")

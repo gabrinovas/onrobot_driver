@@ -10,7 +10,7 @@ class OnRobotDriverNode(Node):
     def __init__(self):
         super().__init__('onrobot_driver_node')
         
-        # Declare parameters FIRST, before creating the gripper
+        # Declare parameters
         self.declare_parameters(
             namespace='',
             parameters=[
@@ -24,7 +24,7 @@ class OnRobotDriverNode(Node):
             ]
         )
         
-        # Now initialize gripper controller
+        # Initialize gripper controller
         self.gripper = OnRobotGripper(self)
         
         self.get_logger().info(f"OnRobot driver node started with gripper_type: {self.get_parameter('gripper_type').value}")
@@ -32,7 +32,8 @@ class OnRobotDriverNode(Node):
     def destroy_node(self):
         """Cleanup before shutdown"""
         self.get_logger().info("Shutting down OnRobot driver node")
-        self.gripper.disconnect()
+        if hasattr(self, 'gripper'):
+            self.gripper.disconnect()
         super().destroy_node()
 
 def main(args=None):
@@ -41,7 +42,7 @@ def main(args=None):
     try:
         node = OnRobotDriverNode()
         
-        # Use multi-threaded executor for action server
+        # Use multi-threaded executor
         executor = MultiThreadedExecutor()
         executor.add_node(node)
         
