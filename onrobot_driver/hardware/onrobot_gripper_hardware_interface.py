@@ -2,15 +2,20 @@
 
 import rclpy
 from rclpy.node import Node
-from rclpy.executors import MultiThreadedExecutor
 from threading import Lock
 
-# Correct ROS2 Control imports for Humble
-from hardware_interface import SystemInterface, CallbackReturn, HardwareInfo
-from hardware_interface.types import LIFE_CYCLE_STATE
-from hardware_interface.hardware_info import HardwareInfo
-
-from onrobot_driver.drivers.onrobot_gripper import OnRobotGripper
+# Try multiple import styles for ROS2 Humble compatibility
+try:
+    # Standard import for ROS2 Humble
+    from hardware_interface import SystemInterface, CallbackReturn
+    from hardware_interface.base_interface import BaseInterface
+except ImportError:
+    try:
+        # Alternative import path
+        from ros2_control.system_interface import SystemInterface, CallbackReturn
+    except ImportError:
+        # Fallback for older versions
+        from ros2_control.hardware_interface import SystemInterface, CallbackReturn
 
 class OnRobotGripperHardwareInterface(SystemInterface):
     """
