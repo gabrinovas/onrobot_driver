@@ -8,10 +8,10 @@ setup(
     name=package_name,
     version='1.0.0',
     packages=[
-        package_name,
+        package_name, 
         f'{package_name}.nodes', 
         f'{package_name}.drivers',
-        f'{package_name}.hardware'
+        f'{package_name}.hardware'  # ADD THIS LINE
     ],
     data_files=[
         ('share/ament_index/resource_index/packages',
@@ -21,8 +21,6 @@ setup(
          glob('launch/*.launch.py')),
         (os.path.join('share', package_name, 'config'),
          glob('config/*.yaml')),
-        (os.path.join('share', package_name, 'config'),
-         glob('onrobot_driver/config/*.yaml')),
     ],
     install_requires=['setuptools'],
     zip_safe=True,
