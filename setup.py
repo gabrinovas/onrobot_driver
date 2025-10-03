@@ -11,7 +11,7 @@ setup(
         package_name, 
         f'{package_name}.nodes', 
         f'{package_name}.drivers',
-        f'{package_name}.hardware'  # ADD THIS
+        f'{package_name}.hardware'
     ],
     data_files=[
         ('share/ament_index/resource_index/packages',
@@ -21,6 +21,9 @@ setup(
          glob('launch/*.launch.py')),
         (os.path.join('share', package_name, 'config'),
          glob('config/*.yaml')),
+        # Add this line to install hardware plugin XML
+        (os.path.join('share', package_name), 
+         glob('onrobot_driver/hardware/*.xml')),
     ],
     install_requires=['setuptools'],
     zip_safe=True,
