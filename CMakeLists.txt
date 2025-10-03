@@ -17,12 +17,6 @@ find_package(builtin_interfaces REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(trajectory_msgs REQUIRED)
 
-# CRITICAL: ROS2 Control dependencies for hardware interface
-find_package(hardware_interface REQUIRED)
-find_package(controller_interface REQUIRED)
-find_package(controller_manager REQUIRED)
-find_package(pluginlib REQUIRED)
-
 # Install Python package
 ament_python_install_package(${PROJECT_NAME})
 
@@ -42,16 +36,14 @@ install(PROGRAMS
   DESTINATION lib/${PROJECT_NAME}
 )
 
-# Install Python modules
-install(PROGRAMS
-  ${PROJECT_NAME}/nodes/onrobot_driver_node.py
+# Install Python modules - ADD THESE LINES
+install(DIRECTORY ${PROJECT_NAME}/
   DESTINATION lib/${PROJECT_NAME}
 )
 
-# Install hardware interface plugin
-install(FILES
-  hardware/onrobot_gripper_plugin.xml
-  DESTINATION share/${PROJECT_NAME}
+# Install hardware interface files
+install(DIRECTORY hardware/
+  DESTINATION share/${PROJECT_NAME}/hardware
 )
 
 # Install resources
@@ -60,13 +52,8 @@ install(FILES
   DESTINATION share/${PROJECT_NAME}/resource
 )
 
-# Export hardware interface plugin
-pluginlib_export_plugin_description_file(hardware_interface hardware/onrobot_gripper_plugin.xml)
-
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
-  #set(ament_cmake_copyright_FOUND TRUE)
-  #set(ament_cmake_cpplint_FOUND TRUE)
   ament_lint_auto_find_test_dependencies()
 endif()
 

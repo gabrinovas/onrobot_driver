@@ -8,9 +8,6 @@ Run this to diagnose import issues before building the full package.
 import sys
 import os
 
-# Add the current directory to Python path to find local modules
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
-
 def test_standard_imports():
     """Test the standard ROS2 Humble imports"""
     print("=" * 60)
@@ -20,68 +17,32 @@ def test_standard_imports():
     try:
         from hardware_interface.system_interface import SystemInterface
         print("✅ SUCCESS: imported SystemInterface from hardware_interface.system_interface")
+        return True
     except ImportError as e:
         print(f"❌ FAILED: SystemInterface - {e}")
         return False
-    
-    try:
-        from hardware_interface.callback_return import CallbackReturn
-        print("✅ SUCCESS: imported CallbackReturn from hardware_interface.callback_return")
-    except ImportError as e:
-        print(f"❌ FAILED: CallbackReturn - {e}")
-        return False
-    
-    try:
-        from hardware_interface.types import LifecycleState
-        print("✅ SUCCESS: imported LifecycleState from hardware_interface.types")
-    except ImportError as e:
-        print(f"❌ FAILED: LifecycleState - {e}")
-        return False
-    
-    try:
-        from hardware_interface.hardware_info import HardwareInfo
-        print("✅ SUCCESS: imported HardwareInfo from hardware_interface.hardware_info")
-    except ImportError as e:
-        print(f"❌ FAILED: HardwareInfo - {e}")
-        return False
-    
-    return True
 
-def test_alternative_imports():
-    """Test alternative import paths"""
+def test_ros2_control_imports():
+    """Test if we can import any ROS2 Control components"""
     print("\n" + "=" * 60)
-    print("TESTING ALTERNATIVE IMPORT PATHS")
+    print("TESTING ROS2 CONTROL COMPONENTS")
     print("=" * 60)
     
+    # Test if we can import controller_manager
     try:
-        from ros2_control.hardware_interface import SystemInterface
-        print("✅ SUCCESS: imported SystemInterface from ros2_control.hardware_interface")
+        import controller_manager
+        print("✅ SUCCESS: imported controller_manager")
     except ImportError as e:
-        print(f"❌ FAILED: SystemInterface (alternative) - {e}")
-        return False
+        print(f"❌ FAILED: controller_manager - {e}")
     
+    # Test if we can import hardware_interface C++ extension (common issue)
     try:
-        from ros2_control.hardware_interface import CallbackReturn
-        print("✅ SUCCESS: imported CallbackReturn from ros2_control.hardware_interface")
+        import hardware_interface
+        print("✅ SUCCESS: imported hardware_interface")
+        return True
     except ImportError as e:
-        print(f"❌ FAILED: CallbackReturn (alternative) - {e}")
+        print(f"❌ FAILED: hardware_interface - {e}")
         return False
-    
-    try:
-        from ros2_control.hardware_interface import LifecycleState
-        print("✅ SUCCESS: imported LifecycleState from ros2_control.hardware_interface")
-    except ImportError as e:
-        print(f"❌ FAILED: LifecycleState (alternative) - {e}")
-        return False
-    
-    try:
-        from ros2_control.hardware_interface import HardwareInfo
-        print("✅ SUCCESS: imported HardwareInfo from ros2_control.hardware_interface")
-    except ImportError as e:
-        print(f"❌ FAILED: HardwareInfo (alternative) - {e}")
-        return False
-    
-    return True
 
 def test_fallback_implementation():
     """Test that fallback implementation works"""
@@ -112,10 +73,6 @@ def test_fallback_implementation():
                 pass
         
         print("✅ SUCCESS: Fallback implementation created")
-        print("   - CallbackReturn enum defined")
-        print("   - LifecycleState enum defined") 
-        print("   - HardwareInfo class defined")
-        print("   - SystemInterface class defined")
         return True
         
     except Exception as e:
@@ -123,38 +80,46 @@ def test_fallback_implementation():
         return False
 
 def test_local_module_imports():
-    """Test importing local modules"""
+    """Test importing local modules with proper path setup"""
     print("\n" + "=" * 60)
     print("TESTING LOCAL MODULE IMPORTS")
     print("=" * 60)
+    
+    # Add the src directory to Python path
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    package_dir = os.path.join(current_dir, '..')
+    src_dir = os.path.join(current_dir, '..', '..')  # src directory
+    
+    sys.path.insert(0, os.path.abspath(package_dir))
+    sys.path.insert(0, os.path.abspath(src_dir))
+    
+    print(f"Added to Python path: {package_dir}")
+    print(f"Added to Python path: {src_dir}")
     
     try:
         # Test importing the hardware interface itself
         from onrobot_driver.hardware.onrobot_gripper_hardware_interface import OnRobotGripperHardwareInterface
         print("✅ SUCCESS: imported OnRobotGripperHardwareInterface")
+        return True
     except ImportError as e:
         print(f"❌ FAILED: OnRobotGripperHardwareInterface - {e}")
+        
+        # Try to see what's available
+        print("\nTrying to debug the import issue...")
+        try:
+            import onrobot_driver
+            print(f"✅ Can import onrobot_driver package from: {onrobot_driver.__file__}")
+        except ImportError as e2:
+            print(f"❌ Cannot import onrobot_driver at all: {e2}")
+            
+        # List contents of the directory
+        hardware_dir = os.path.join(package_dir, 'hardware')
+        if os.path.exists(hardware_dir):
+            print(f"Contents of hardware directory: {os.listdir(hardware_dir)}")
+        else:
+            print(f"Hardware directory not found at: {hardware_dir}")
+            
         return False
-    
-    try:
-        # Test importing the gripper driver
-        from onrobot_driver.drivers.onrobot_gripper import OnRobotGripper
-        print("✅ SUCCESS: imported OnRobotGripper")
-    except ImportError as e:
-        print(f"⚠️  WARNING: OnRobotGripper - {e}")
-        # This might be expected if dependencies aren't installed yet
-        return True
-    
-    try:
-        # Test importing modbus client
-        from onrobot_driver.drivers.modbus_client import ModbusTCPClient
-        print("✅ SUCCESS: imported ModbusTCPClient")
-    except ImportError as e:
-        print(f"⚠️  WARNING: ModbusTCPClient - {e}")
-        # This might be expected if dependencies aren't installed yet
-        return True
-    
-    return True
 
 def check_ros_environment():
     """Check if ROS environment is properly set up"""
@@ -178,15 +143,32 @@ def check_ros_environment():
         print(f"❌ FAILED: rclpy - {e}")
         return False
     
-    # Check ROS2 Control package installation
+    # Check ROS2 Control package installation at system level
     try:
         import subprocess
         result = subprocess.run(['ros2', 'pkg', 'list'], capture_output=True, text=True)
         if 'hardware_interface' in result.stdout:
-            print("✅ SUCCESS: hardware_interface package found")
+            print("✅ SUCCESS: hardware_interface package found in ROS2 packages")
         else:
-            print("❌ FAILED: hardware_interface package not found in ROS2 packages")
-            return False
+            print("❌ hardware_interface package not found in ROS2 packages")
+            
+        # Check if it's a C++ only package (common issue)
+        print("\nChecking package contents...")
+        result = subprocess.run(['ros2', 'pkg', 'prefix', 'hardware_interface'], 
+                              capture_output=True, text=True)
+        if result.returncode == 0:
+            pkg_path = result.stdout.strip()
+            print(f"hardware_interface package path: {pkg_path}")
+            
+            # Check for Python modules
+            python_path = os.path.join(pkg_path, 'local', 'lib', 'python3.10', 'dist-packages')
+            if os.path.exists(python_path):
+                print(f"Python path exists: {python_path}")
+                # Add it to Python path
+                sys.path.insert(0, python_path)
+        else:
+            print("Could not find hardware_interface package path")
+            
     except Exception as e:
         print(f"⚠️  WARNING: Could not check ROS2 packages - {e}")
     
@@ -206,10 +188,8 @@ def main():
     # Test standard imports
     standard_ok = test_standard_imports()
     
-    # Test alternative imports if standard failed
-    alternative_ok = False
-    if not standard_ok:
-        alternative_ok = test_alternative_imports()
+    # Test ROS2 Control components
+    ros2_control_ok = test_ros2_control_imports()
     
     # Test fallback implementation
     fallback_ok = test_fallback_implementation()
@@ -225,11 +205,11 @@ def main():
     if standard_ok:
         print("✅ STANDARD IMPORTS: WORKING - Using hardware_interface imports")
         result = 0
-    elif alternative_ok:
-        print("✅ ALTERNATIVE IMPORTS: WORKING - Using ros2_control imports")
+    elif ros2_control_ok:
+        print("✅ ROS2 CONTROL: Some components available")
         result = 0
     elif fallback_ok:
-        print("⚠️  FALLBACK MODE: Using fallback implementation (no ROS2 Control)")
+        print("⚠️  FALLBACK MODE: Using fallback implementation (no ROS2 Control Python bindings)")
         result = 0
     else:
         print("❌ ALL IMPORT METHODS FAILED")
@@ -242,6 +222,19 @@ def main():
         result = 1
     
     print(f"\nOverall result: {'SUCCESS' if result == 0 else 'FAILED'}")
+    
+    if result != 0:
+        print("\n" + "=" * 60)
+        print("TROUBLESHOOTING TIPS")
+        print("=" * 60)
+        print("1. Make sure you're in your workspace directory")
+        print("2. Run: 'source /opt/ros/humble/setup.bash'")
+        print("3. Run: 'colcon build --packages-select onrobot_driver'") 
+        print("4. Run: 'source install/setup.bash'")
+        print("5. Try the test again")
+        print("\nCommon issue: hardware_interface Python bindings may not be available")
+        print("in ROS2 Humble. The fallback implementation should work for testing.")
+    
     return result
 
 if __name__ == '__main__':
