@@ -16,7 +16,7 @@
   <depend>geometry_msgs</depend>
   <depend>trajectory_msgs</depend>
   
-  <!-- ROS2 Control dependencies - CRITICAL -->
+  <!-- ROS2 Control dependencies - UPDATED -->
   <depend>hardware_interface</depend>
   <depend>controller_interface</depend>
   <depend>controller_manager</depend>
@@ -31,9 +31,6 @@
   <test_depend>ament_lint_auto</test_depend>
   <test_depend>ament_lint_common</test_depend>
   
-  <!-- Python dependencies -->
-  <exec_depend>python3-pip</exec_depend>
-
   <export>
     <build_type>ament_cmake</build_type>
   </export>

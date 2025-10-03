@@ -1,7 +1,7 @@
 import socket
 import struct
 import time
-from typing import Optional
+from typing import Optional, List
 
 class ModbusTCPClient:
     """
@@ -52,30 +52,38 @@ class ModbusTCPClient:
         frame += bytes([function_code]) + data
         return frame
     
-    def read_holding_registers(self, address: int, count: int) -> Optional[list]:
+    def read_holding_registers(self, address: int, count: int) -> Optional[List[int]]:
         """Read holding registers - for reading gripper status"""
-        data = struct.pack('>HH', address, count)
-        frame = self._create_modbus_frame(0x03, data)
-        
-        response = self.send_command(frame, expect_response=True)
-        if response and len(response) >= 9:
-            byte_count = response[8]
-            if len(response) >= 9 + byte_count:
-                values = []
-                for i in range(0, byte_count, 2):
-                    if i + 1 < byte_count:
-                        value = struct.unpack('>H', response[9+i:9+i+2])[0]
-                        values.append(value)
-                return values
-        return None
+        try:
+            data = struct.pack('>HH', address, count)
+            frame = self._create_modbus_frame(0x03, data)
+            
+            response = self.send_command(frame, expect_response=True)
+            if response and len(response) >= 9:
+                byte_count = response[8]
+                if len(response) >= 9 + byte_count:
+                    values = []
+                    for i in range(0, byte_count, 2):
+                        if i + 1 < byte_count:
+                            value = struct.unpack('>H', response[9+i:9+i+2])[0]
+                            values.append(value)
+                    return values
+            return None
+        except Exception as e:
+            print(f"Error reading holding registers: {e}")
+            return None
     
     def write_single_register(self, address: int, value: int) -> bool:
         """Write single register - for sending gripper commands"""
-        data = struct.pack('>HH', address, value)
-        frame = self._create_modbus_frame(0x06, data)
-        
-        response = self.send_command(frame, expect_response=True)
-        return response is not None and len(response) >= 8
+        try:
+            data = struct.pack('>HH', address, value)
+            frame = self._create_modbus_frame(0x06, data)
+            
+            response = self.send_command(frame, expect_response=True)
+            return response is not None and len(response) >= 8
+        except Exception as e:
+            print(f"Error writing single register: {e}")
+            return False
     
     def send_command(self, command: bytes, expect_response: bool = True) -> Optional[bytes]:
         """Send command and receive response"""
@@ -91,3 +99,12 @@ class ModbusTCPClient:
             print(f"Error sending command: {e}")
             self.is_connected = False
             return None
+
+    def read_status(self) -> Optional[bytes]:
+        """Read gripper status - placeholder for actual implementation"""
+        # This would need to be implemented based on OnRobot's specific protocol
+        # For now, return simulated data
+        if self.is_connected:
+            # Simulate status response
+            return bytes([0x01, 0x00, 0x80, 0x00, 0x40, 0x00])  # Ready, position 128, force 64
+        return None
