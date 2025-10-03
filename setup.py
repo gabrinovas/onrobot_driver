@@ -11,7 +11,7 @@ setup(
         package_name, 
         f'{package_name}.nodes', 
         f'{package_name}.drivers',
-        f'{package_name}.hardware'  # ADD THIS LINE
+        f'{package_name}.hardware'  # ADD THIS
     ],
     data_files=[
         ('share/ament_index/resource_index/packages',
