@@ -42,7 +42,7 @@ install(DIRECTORY ${PROJECT_NAME}/
 )
 
 # Install hardware interface files
-install(DIRECTORY hardware/
+install(DIRECTORY onrobot_driver/hardware/
   DESTINATION share/${PROJECT_NAME}/hardware
 )
 
