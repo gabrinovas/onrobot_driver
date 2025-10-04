@@ -52,6 +52,16 @@ install(FILES
   DESTINATION share/${PROJECT_NAME}/resource
 )
 
+# # Add this section if you want to use Python tests with colcon test
+# if(BUILD_TESTING)
+#   find_package(ament_cmake_pytest REQUIRED)
+  
+#   # Add Python tests
+#   ament_add_pytest_test(test_basic test/basic_test.py)
+#   ament_add_pytest_test(test_simple_node test/simple_test_node.py)
+#   ament_add_pytest_test(test_gripper test/test_gripper.py)
+# endif()
+
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
   ament_lint_auto_find_test_dependencies()

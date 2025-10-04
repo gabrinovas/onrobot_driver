@@ -30,7 +30,19 @@
   <!-- Test dependencies -->
   <test_depend>ament_lint_auto</test_depend>
   <test_depend>ament_lint_common</test_depend>
-  
+  <test_depend>ament_cmake_pytest</test_depend>
+  <test_depend>ament_copyright</test_depend>
+  <test_depend>ament_flake8</test_depend>
+  <test_depend>ament_pep257</test_depend>
+  <test_depend>ament_xmllint</test_depend>
+  <test_depend>launch</test_depend>
+  <test_depend>launch_ros</test_depend>
+  <test_depend>launch_testing</test_depend>
+  <test_depend>launch_testing_ros</test_depend>
+  <test_depend>pytest</test_depend>
+  <test_depend>pytest-cov</test_depend>
+  <test_depend>pytest-mock</test_depend>
+
   <export>
     <build_type>ament_cmake</build_type>
   </export>
