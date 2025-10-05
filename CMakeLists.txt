@@ -17,6 +17,10 @@ find_package(builtin_interfaces REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(trajectory_msgs REQUIRED)
 
+# Hardware interface dependencies
+find_package(hardware_interface REQUIRED)
+find_package(pluginlib REQUIRED)
+
 # Install Python package
 ament_python_install_package(${PROJECT_NAME})
 
@@ -33,34 +37,23 @@ install(DIRECTORY config
 # Install node executable
 install(PROGRAMS
   scripts/onrobot_driver_node
+  scripts/control_gripper.py
   DESTINATION lib/${PROJECT_NAME}
 )
 
-# Install Python modules - ADD THESE LINES
+# Install Python modules
 install(DIRECTORY ${PROJECT_NAME}/
   DESTINATION lib/${PROJECT_NAME}
 )
 
-# Install hardware interface files
-install(DIRECTORY onrobot_driver/hardware/
-  DESTINATION share/${PROJECT_NAME}/hardware
-)
+# Install hardware interface plugin
+pluginlib_export_plugin_description_file(hardware_interface onrobot_driver/hardware/onrobot_gripper_plugin.xml)
 
 # Install resources
 install(FILES
   resource/onrobot_driver
   DESTINATION share/${PROJECT_NAME}/resource
 )
-
-# # Add this section if you want to use Python tests with colcon test
-# if(BUILD_TESTING)
-#   find_package(ament_cmake_pytest REQUIRED)
-  
-#   # Add Python tests
-#   ament_add_pytest_test(test_basic test/basic_test.py)
-#   ament_add_pytest_test(test_simple_node test/simple_test_node.py)
-#   ament_add_pytest_test(test_gripper test/test_gripper.py)
-# endif()
 
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
