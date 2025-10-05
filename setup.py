@@ -21,12 +21,8 @@ setup(
          glob('launch/*.launch.py')),
         (os.path.join('share', package_name, 'config'),
          glob('config/*.yaml')),
-        # Install test files
         (os.path.join('share', package_name, 'test'),
          glob('test/*.py')),
-        # Install the new control script
-        (os.path.join('lib', package_name),
-         glob('scripts/*.py')),
     ],
     install_requires=['setuptools'],
     zip_safe=True,

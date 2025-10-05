@@ -17,10 +17,6 @@ find_package(builtin_interfaces REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(trajectory_msgs REQUIRED)
 
-# Hardware interface dependencies
-find_package(hardware_interface REQUIRED)
-find_package(pluginlib REQUIRED)
-
 # Install Python package
 ament_python_install_package(${PROJECT_NAME})
 
@@ -38,21 +34,6 @@ install(DIRECTORY config
 install(DIRECTORY test
   DESTINATION share/${PROJECT_NAME}
 )
-
-# Install node executable
-install(PROGRAMS
-  scripts/onrobot_driver_node
-  scripts/control_gripper.py
-  DESTINATION lib/${PROJECT_NAME}
-)
-
-# Install Python modules
-install(DIRECTORY ${PROJECT_NAME}/
-  DESTINATION lib/${PROJECT_NAME}
-)
-
-# Install hardware interface plugin
-pluginlib_export_plugin_description_file(hardware_interface onrobot_driver/hardware/onrobot_gripper_plugin.xml)
 
 # Install resources
 install(FILES
