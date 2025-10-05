@@ -34,6 +34,11 @@ install(DIRECTORY config
   DESTINATION share/${PROJECT_NAME}
 )
 
+# Install test files
+install(DIRECTORY test
+  DESTINATION share/${PROJECT_NAME}
+)
+
 # Install node executable
 install(PROGRAMS
   scripts/onrobot_driver_node

@@ -3,15 +3,16 @@ from launch_ros.actions import Node
 from launch.actions import ExecuteProcess, TimerAction
 from launch.substitutions import PathJoinSubstitution
 from launch_ros.substitutions import FindPackageShare
+import os
 
 def generate_launch_description():
+    # Get the package share directory
+    onrobot_driver_share = FindPackageShare('onrobot_driver').find('onrobot_driver')
+    
     return LaunchDescription([
         # Mock server for simulation testing
         ExecuteProcess(
-            cmd=['python3', PathJoinSubstitution([
-                FindPackageShare('onrobot_driver'),
-                'test/mock_gripper_server.py'
-            ])],
+            cmd=['python3', os.path.join(onrobot_driver_share, 'test/mock_gripper_server.py')],
             output='screen'
         ),
         
@@ -43,10 +44,7 @@ def generate_launch_description():
             period=5.0,
             actions=[
                 ExecuteProcess(
-                    cmd=['python3', PathJoinSubstitution([
-                        FindPackageShare('onrobot_driver'),
-                        'test/integration_test.py'
-                    ]), '--no-mock'],  # Don't start another mock server
+                    cmd=['python3', os.path.join(onrobot_driver_share, 'test/integration_test.py'), '--no-mock'],
                     output='screen'
                 )
             ]

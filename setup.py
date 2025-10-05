@@ -21,11 +21,11 @@ setup(
          glob('launch/*.launch.py')),
         (os.path.join('share', package_name, 'config'),
          glob('config/*.yaml')),
-        # Add this line to install hardware plugin XML
-        (os.path.join('share', package_name), 
-         glob('onrobot_driver/hardware/*.xml')),
+        # Install test files
+        (os.path.join('share', package_name, 'test'),
+         glob('test/*.py')),
         # Install the new control script
-        (os.path.join('share', package_name, 'scripts'),
+        (os.path.join('lib', package_name),
          glob('scripts/*.py')),
     ],
     install_requires=['setuptools'],
@@ -38,7 +38,7 @@ setup(
     entry_points={
         'console_scripts': [
             'onrobot_driver_node = onrobot_driver.nodes.onrobot_driver_node:main',
-            'control_gripper = onrobot_driver.scripts.control_gripper:main',  # Add this line
+            'control_gripper = onrobot_driver.scripts.control_gripper:main',
         ],
     },
 )
