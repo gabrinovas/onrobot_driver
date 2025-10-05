@@ -1,17 +1,21 @@
 from launch import LaunchDescription
 from launch_ros.actions import Node
-from launch.actions import DeclareLaunchArgument
+from launch.actions import DeclareLaunchArgument, ExecuteProcess, TimerAction
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 from launch_ros.substitutions import FindPackageShare
+import os
 
 def generate_launch_description():
+    pkg_path = FindPackageShare('onrobot_driver').find('onrobot_driver')
+    
     return LaunchDescription([
-        DeclareLaunchArgument(
-            'config_file',
-            default_value='onrobot_params.yaml',
-            description='Path to config file'
+        # Mock server for simulation
+        ExecuteProcess(
+            cmd=['python3', os.path.join(pkg_path, 'test/mock_gripper_server.py')],
+            output='screen'
         ),
         
+        # Driver node with simulation config
         Node(
             package='onrobot_driver',
             executable='onrobot_driver_node',
@@ -21,7 +25,7 @@ def generate_launch_description():
                 PathJoinSubstitution([
                     FindPackageShare('onrobot_driver'),
                     'config',
-                    LaunchConfiguration('config_file')
+                    'simulation_params.yaml'
                 ])
             ]
         ),
