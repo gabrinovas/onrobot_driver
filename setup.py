@@ -25,7 +25,7 @@ setup(
          glob('test/*.py')),
     ],
     install_requires=['setuptools'],
-    zip_safe=True,
+    zip_safe=False,
     maintainer='Gabriel Novas',
     maintainer_email='gabriel.novas@aimen.es',
     description='ROS2 Python driver for OnRobot grippers via Compute Box',

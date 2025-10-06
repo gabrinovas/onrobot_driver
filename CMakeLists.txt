@@ -17,8 +17,24 @@ find_package(builtin_interfaces REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(trajectory_msgs REQUIRED)
 
+# Install Python scripts as executables
+install(PROGRAMS
+  scripts/control_gripper.py
+  RENAME control_gripper
+  DESTINATION lib/${PROJECT_NAME}
+)
+
+# Install the main node as executable
+install(PROGRAMS
+  nodes/onrobot_driver_node.py
+  RENAME onrobot_driver_node
+  DESTINATION lib/${PROJECT_NAME}
+)
+
 # Install Python package
-ament_python_install_package(${PROJECT_NAME})
+install(DIRECTORY ${PROJECT_NAME}/
+  DESTINATION lib/${PROJECT_NAME}
+)
 
 # Install launch files
 install(DIRECTORY launch
