@@ -4,7 +4,7 @@
   <name>onrobot_driver</name>
   <version>1.0.0</version>
   <description>ROS2 Python driver for OnRobot grippers via Compute Box</description>
-  <maintainer email="your.email@example.com">Your Name</maintainer>
+  <maintainer email="gabriel.novas@aimen.es">Gabriel Novas</maintainer>
   <license>Apache-2.0</license>
 
   <depend>rclpy</depend>
@@ -16,7 +16,7 @@
   <depend>geometry_msgs</depend>
   <depend>trajectory_msgs</depend>
   
-  <!-- ROS2 Control dependencies - UPDATED -->
+  <!-- ROS2 Control dependencies -->
   <depend>hardware_interface</depend>
   <depend>controller_interface</depend>
   <depend>controller_manager</depend>

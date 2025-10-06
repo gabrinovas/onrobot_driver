@@ -17,6 +17,11 @@ find_package(builtin_interfaces REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(trajectory_msgs REQUIRED)
 
+# Install Python package first
+install(DIRECTORY ${PROJECT_NAME}/
+  DESTINATION lib/${PROJECT_NAME}
+)
+
 # Install Python scripts as executables
 install(PROGRAMS
   scripts/control_gripper.py
@@ -24,15 +29,9 @@ install(PROGRAMS
   DESTINATION lib/${PROJECT_NAME}
 )
 
-# Install the main node as executable
+# Install the main node as executable - FIXED: Remove RENAME
 install(PROGRAMS
-  nodes/onrobot_driver_node.py
-  RENAME onrobot_driver_node
-  DESTINATION lib/${PROJECT_NAME}
-)
-
-# Install Python package
-install(DIRECTORY ${PROJECT_NAME}/
+  nodes/onrobot_driver_node
   DESTINATION lib/${PROJECT_NAME}
 )
 
