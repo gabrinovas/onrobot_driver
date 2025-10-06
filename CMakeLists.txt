@@ -17,10 +17,8 @@ find_package(builtin_interfaces REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(trajectory_msgs REQUIRED)
 
-# Install Python package first
-install(DIRECTORY ${PROJECT_NAME}/
-  DESTINATION lib/${PROJECT_NAME}
-)
+# Install Python package
+ament_python_install_package(${PROJECT_NAME})
 
 # Install Python scripts as executables
 install(PROGRAMS
@@ -29,9 +27,9 @@ install(PROGRAMS
   DESTINATION lib/${PROJECT_NAME}
 )
 
-# Install the main node as executable - FIXED PATH
+# Install the main node as executable
 install(PROGRAMS
-  ${PROJECT_NAME}/nodes/onrobot_driver_node.py
+  nodes/onrobot_driver_node.py
   RENAME onrobot_driver_node
   DESTINATION lib/${PROJECT_NAME}
 )
@@ -55,12 +53,6 @@ install(DIRECTORY test
 install(FILES
   resource/onrobot_driver
   DESTINATION share/${PROJECT_NAME}/resource
-)
-
-# Install hardware interface plugin
-install(FILES
-  ${PROJECT_NAME}/hardware/onrobot_gripper_plugin.xml
-  DESTINATION share/${PROJECT_NAME}
 )
 
 if(BUILD_TESTING)
