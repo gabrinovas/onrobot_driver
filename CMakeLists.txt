@@ -29,9 +29,9 @@ install(PROGRAMS
   DESTINATION lib/${PROJECT_NAME}
 )
 
-# Install the main node as executable - SHOULD BE .py NOW
+# Install the main node as executable - FIXED PATH
 install(PROGRAMS
-  nodes/onrobot_driver_node.py
+  ${PROJECT_NAME}/nodes/onrobot_driver_node.py
   RENAME onrobot_driver_node
   DESTINATION lib/${PROJECT_NAME}
 )
@@ -55,6 +55,12 @@ install(DIRECTORY test
 install(FILES
   resource/onrobot_driver
   DESTINATION share/${PROJECT_NAME}/resource
+)
+
+# Install hardware interface plugin
+install(FILES
+  ${PROJECT_NAME}/hardware/onrobot_gripper_plugin.xml
+  DESTINATION share/${PROJECT_NAME}
 )
 
 if(BUILD_TESTING)
