@@ -10,25 +10,10 @@ class OnRobotDriverNode(Node):
     def __init__(self):
         super().__init__('onrobot_driver_node')
         
-        # Declare parameters
-        self.declare_parameters(
-            namespace='',
-            parameters=[
-                ('gripper_type', '2FG7'),
-                ('ip_address', '192.168.1.1'),
-                ('port', 502),
-                ('max_width', 0.085),
-                ('min_width', 0.0),
-                ('max_force', 100.0),
-                ('update_rate', 100.0),
-                ('simulation_mode', False),
-            ]
-        )
-        
-        # Initialize gripper controller
+        # Initialize gripper controller - let it declare its own parameters
         self.gripper = OnRobotGripper(self)
         
-        self.get_logger().info(f"OnRobot driver node started with gripper_type: {self.get_parameter('gripper_type').value}")
+        self.get_logger().info(f"OnRobot driver node started with gripper_type: {self.gripper.gripper_type}")
     
     def destroy_node(self):
         """Cleanup before shutdown"""
