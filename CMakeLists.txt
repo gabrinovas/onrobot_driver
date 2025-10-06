@@ -26,7 +26,7 @@ install(PROGRAMS
 
 # Install the main node as executable
 install(PROGRAMS
-  nodes/onrobot_driver_node
+  nodes/onrobot_driver_node.py
   RENAME onrobot_driver_node
   DESTINATION lib/${PROJECT_NAME}
 )
