@@ -117,7 +117,7 @@ class OnRobotGripper:
         self.timer = self.node.create_timer(1.0/self.update_rate, self.timer_callback)
         
         self.logger.info("ROS2 interfaces initialized")
-    
+
     def execute_action_callback(self, goal_handle):
         """Execute gripper action command - works for both simulation and hardware"""
         goal = goal_handle.request.command
@@ -370,12 +370,12 @@ class OnRobotGripper:
             # If status read failed, use current state
             pass
         
-        # Publish joint state
+        # Publish joint state - UPDATED to match URDF joint names
         joint_state = JointState()
         joint_state.header.stamp = self.node.get_clock().now().to_msg()
-        joint_state.name = ['onrobot_gripper_finger1_joint', 'onrobot_gripper_finger2_joint']
+        joint_state.name = ['left_finger_joint', 'right_finger_joint']
         joint_state.position = [self.current_position / 2, self.current_position / 2]  # Split between fingers
-        joint_state.velocity = [0.0, 0.0]  # Would need to calculate from position changes
+        joint_state.velocity = [0.0, 0.0]
         joint_state.effort = [self.current_force, self.current_force]
         
         self.joint_state_pub.publish(joint_state)

@@ -145,49 +145,56 @@ class OnRobotGripperHardwareInterface(SystemInterface):
             'data': self.position_
         })
         interfaces.append({
-            'name': 'left_finger_joint', 
-            'interface': 'velocity',
-            'data': self.velocity_
-        })
-        interfaces.append({
             'name': 'left_finger_joint',
-            'interface': 'effort', 
-            'data': self.effort_
-        })
-        
-        interfaces.append({
-            'name': 'right_finger_joint',
-            'interface': 'position',
-            'data': self.position_  # Mirrored
-        })
-        interfaces.append({
-            'name': 'right_finger_joint',
             'interface': 'velocity', 
             'data': self.velocity_
         })
         interfaces.append({
-            'name': 'right_finger_joint',
+            'name': 'left_finger_joint',
             'interface': 'effort',
+            'data': self.effort_
+        })
+
+        interfaces.append({
+            'name': 'right_finger_joint',
+            'interface': 'position',
+            'data': self.position_  # Symmetrical movement
+        })
+        interfaces.append({
+            'name': 'right_finger_joint', 
+            'interface': 'velocity',
+            'data': self.velocity_
+        })
+        interfaces.append({
+            'name': 'right_finger_joint',
+            'interface': 'effort', 
             'data': self.effort_
         })
         
         return interfaces
-    
+
     def export_command_interfaces(self):
         """
         Export command interfaces for ROS2 Control
         """
         interfaces = []
-        
+                
         # Add command interface for position control
         interfaces.append({
             'name': 'left_finger_joint',
             'interface': 'position', 
             'data': self.command_position_
         })
-        
+
+        # For symmetrical gripper, both joints should move together
+        interfaces.append({
+            'name': 'right_finger_joint',
+            'interface': 'position', 
+            'data': self.command_position_
+        })
+
         return interfaces
-    
+        
     def read(self):
         """
         Read data from hardware
