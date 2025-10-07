@@ -101,7 +101,7 @@ class OnRobotGripper:
     def setup_ros_interfaces(self):
         """Setup ROS2 publishers, subscribers, and action servers"""
         # Publishers
-        self.joint_state_pub = self.node.create_publisher(JointState, 'joint_states', 10)
+        # self.joint_state_pub = self.node.create_publisher(JointState, 'joint_states', 10)
         self.status_pub = self.node.create_publisher(Bool, 'gripper_status', 10)
         self.position_pub = self.node.create_publisher(Float32, 'gripper_position', 10)
         
@@ -370,15 +370,15 @@ class OnRobotGripper:
             # If status read failed, use current state
             pass
         
-        # Publish joint state - UPDATED to match URDF joint names
-        joint_state = JointState()
-        joint_state.header.stamp = self.node.get_clock().now().to_msg()
-        joint_state.name = ['left_finger_joint', 'right_finger_joint']
-        joint_state.position = [self.current_position / 2, self.current_position / 2]  # Split between fingers
-        joint_state.velocity = [0.0, 0.0]
-        joint_state.effort = [self.current_force, self.current_force]
+        # # Publish joint state - UPDATED to match URDF joint names
+        # joint_state = JointState()
+        # joint_state.header.stamp = self.node.get_clock().now().to_msg()
+        # joint_state.name = ['left_finger_joint', 'right_finger_joint']
+        # joint_state.position = [self.current_position / 2, self.current_position / 2]  # Split between fingers
+        # joint_state.velocity = [0.0, 0.0]
+        # joint_state.effort = [self.current_force, self.current_force]
         
-        self.joint_state_pub.publish(joint_state)
+        # self.joint_state_pub.publish(joint_state)
         
         # Publish status
         status_msg = Bool()
