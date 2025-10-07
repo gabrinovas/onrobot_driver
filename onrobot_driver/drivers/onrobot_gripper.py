@@ -50,12 +50,13 @@ class OnRobotGripper:
         # Gripper state
 
         # Start at mid position
-        self.current_position = (self.max_width + self.min_width) / 2  # 55mm
+        middle_position = (self.max_width + self.min_width) / 2  # 0.055
+        self.current_position = middle_position
+        self.target_position = middle_position
         self.current_force = 0.0
         self.is_ready = True
         self.is_moving = False
         self.lock = Lock()
-        self.target_position = self.max_width
         
         # Hardware communication (only initialized if needed)
         self.client = None
