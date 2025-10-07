@@ -24,8 +24,10 @@ class OnRobotGripper:
         self.node.declare_parameter('gripper_type', '2FG7')
         self.node.declare_parameter('ip_address', '192.168.1.1')
         self.node.declare_parameter('port', 502)
-        self.node.declare_parameter('max_width', 0.085)
-        self.node.declare_parameter('min_width', 0.0)
+        # CORRECTED gripper parameters for 75mm-35mm range
+        self.node.declare_parameter('max_width', 0.075)    # 75mm max opening
+        self.node.declare_parameter('min_width', 0.035)    # 35mm min opening
+
         self.node.declare_parameter('max_force', 100.0)
         self.node.declare_parameter('update_rate', 100.0)
         self.node.declare_parameter('simulation_mode', False)
@@ -34,8 +36,8 @@ class OnRobotGripper:
         self.gripper_type = self.node.get_parameter('gripper_type').value
         self.ip_address = self.node.get_parameter('ip_address').value
         self.port = self.node.get_parameter('port').value
-        self.max_width = self.node.get_parameter('max_width').value
-        self.min_width = self.node.get_parameter('min_width').value
+        self.max_width = self.node.get_parameter('max_width').value  # 0.075
+        self.min_width = self.node.get_parameter('min_width').value  # 0.035
         self.max_force = self.node.get_parameter('max_force').value
         self.update_rate = self.node.get_parameter('update_rate').value
         self.simulation_mode = self.node.get_parameter('simulation_mode').value
@@ -46,7 +48,9 @@ class OnRobotGripper:
             self.logger.info("Auto-detected simulation mode from IP address")
         
         # Gripper state
-        self.current_position = self.max_width  # Start open
+
+        # Start at mid position
+        self.current_position = (self.max_width + self.min_width) / 2  # 55mm
         self.current_force = 0.0
         self.is_ready = True
         self.is_moving = False
