@@ -3,8 +3,8 @@
     gripper_type: "2FG7"
     ip_address: "127.0.0.1"
     port: 1502
-    max_width: 0.085
-    min_width: 0.0
+    max_width: 0.075    # 75mm max opening
+    min_width: 0.035    # 35mm min opening
     max_force: 100.0
     update_rate: 10.0
     simulation_mode: true
