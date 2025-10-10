@@ -6,16 +6,19 @@ from launch_ros.substitutions import FindPackageShare
 import os
 
 def generate_launch_description():
+    # Find the package share directory for onrobot_driver
     pkg_path = FindPackageShare('onrobot_driver').find('onrobot_driver')
     
     return LaunchDescription([
-        # Mock server for simulation
+        # Start a mock gripper server for simulation purposes.
+        # This simulates the OnRobot Compute Box for testing the driver without hardware.
         ExecuteProcess(
             cmd=['python3', os.path.join(pkg_path, 'test/mock_gripper_server.py')],
             output='screen'
         ),
         
-        # Driver node with simulation config
+        # Launch the OnRobot gripper driver node with simulation parameters.
+        # Uses the simulation_params.yaml config file for simulation settings.
         Node(
             package='onrobot_driver',
             executable='onrobot_driver_node',

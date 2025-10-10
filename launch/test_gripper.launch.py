@@ -10,13 +10,15 @@ def generate_launch_description():
     onrobot_driver_share = FindPackageShare('onrobot_driver').find('onrobot_driver')
     
     return LaunchDescription([
-        # Mock server for simulation testing
+        # Start the mock gripper server for simulation testing.
+        # This simulates the OnRobot Compute Box so the driver can be tested without hardware.
         ExecuteProcess(
             cmd=['python3', os.path.join(onrobot_driver_share, 'test/mock_gripper_server.py')],
             output='screen'
         ),
         
-        # Driver node with simulation config
+        # Start the driver node with simulation parameters after a short delay (2 seconds).
+        # This ensures the mock server is running before the driver starts.
         TimerAction(
             period=2.0,
             actions=[
@@ -26,20 +28,21 @@ def generate_launch_description():
                     name='onrobot_driver',
                     output='screen',
                     parameters=[{
-                        'gripper_type': '2FG7',
-                        'ip_address': '127.0.0.1',
-                        'port': 1502,
-                        'max_width': 0.085,
-                        'min_width': 0.0,
-                        'max_force': 100.0,
-                        'update_rate': 10.0,
-                        'simulation_mode': True,
+                        'gripper_type': '2FG7',         # Gripper model type
+                        'ip_address': '127.0.0.1',      # Localhost for simulation
+                        'port': 1502,                   # Non-standard port for simulation
+                        'max_width': 0.085,             # Max opening width in meters
+                        'min_width': 0.0,               # Min opening width in meters
+                        'max_force': 100.0,             # Max gripping force in Newtons
+                        'update_rate': 10.0,            # Update rate in Hz
+                        'simulation_mode': True,        # Enable simulation mode
                     }]
                 )
             ]
         ),
         
-        # Run integration test after everything is started
+        # Run the integration test after everything is started (5 seconds delay).
+        # This script will test the driver node's functionality in the simulated environment.
         TimerAction(
             period=5.0,
             actions=[

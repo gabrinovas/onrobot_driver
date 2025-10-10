@@ -1,10 +1,29 @@
-/**:
+# OnRobot Gripper ROS2 Simulation Parameters
+# This YAML file configures the OnRobot gripper driver node for simulation.
+# Adjust these parameters for your simulation environment.
+
+ /**:
   ros__parameters:
+    # Gripper model type (e.g., "2FG7", "3FG15", "VGC10", etc.)
     gripper_type: "2FG7"
+
+    # IP address for simulation (localhost)
     ip_address: "127.0.0.1"
+
+    # TCP port for simulation (use a non-standard port to avoid conflicts)
     port: 1502
+
+    # Maximum opening width of the gripper in meters (e.g., 0.075 = 75mm)
     max_width: 0.075    # 75mm max opening
+
+    # Minimum opening width of the gripper in meters (e.g., 0.035 = 35mm)
     min_width: 0.035    # 35mm min opening
+
+    # Maximum gripping force in Newtons
     max_force: 100.0
+
+    # Driver update rate in Hz (lower for simulation)
     update_rate: 10.0
+
+    # Enable simulation mode (true = no hardware required)
     simulation_mode: true

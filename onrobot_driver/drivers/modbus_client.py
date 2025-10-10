@@ -10,6 +10,7 @@ class ModbusTCPClient:
     """
     
     def __init__(self, ip: str = "192.168.1.1", port: int = 502, unit_id: int = 1, timeout: float = 2.0):
+        # Initialize connection parameters
         self.ip = ip
         self.port = port
         self.unit_id = unit_id
@@ -39,7 +40,14 @@ class ModbusTCPClient:
         self.is_connected = False
     
     def _create_modbus_frame(self, function_code: int, data: bytes) -> bytes:
-        """Create Modbus TCP frame"""
+        """
+        Create a Modbus TCP frame.
+        Args:
+            function_code: Modbus function code (e.g., 0x03 for read, 0x06 for write)
+            data: Data payload for the frame
+        Returns:
+            Complete Modbus TCP frame as bytes
+        """
         self.transaction_id = (self.transaction_id + 1) % 65536
         length = len(data) + 2  # +2 for unit_id and function_code
         
@@ -53,7 +61,14 @@ class ModbusTCPClient:
         return frame
     
     def read_holding_registers(self, address: int, count: int) -> Optional[List[int]]:
-        """Read holding registers - for reading gripper status"""
+        """
+        Read holding registers from the gripper.
+        Args:
+            address: Register address to start reading from
+            count: Number of registers to read
+        Returns:
+            List of register values or None on failure
+        """
         try:
             data = struct.pack('>HH', address, count)
             frame = self._create_modbus_frame(0x03, data)
@@ -74,7 +89,14 @@ class ModbusTCPClient:
             return None
     
     def write_single_register(self, address: int, value: int) -> bool:
-        """Write single register - for sending gripper commands"""
+        """
+        Write a single register on the gripper.
+        Args:
+            address: Register address to write to
+            value: Value to write
+        Returns:
+            True if successful, False otherwise
+        """
         try:
             data = struct.pack('>HH', address, value)
             frame = self._create_modbus_frame(0x06, data)
@@ -86,7 +108,14 @@ class ModbusTCPClient:
             return False
     
     def send_command(self, command: bytes, expect_response: bool = True) -> Optional[bytes]:
-        """Send command and receive response"""
+        """
+        Send a command to the gripper and optionally receive a response.
+        Args:
+            command: Command bytes to send
+            expect_response: Whether to wait for a response
+        Returns:
+            Response bytes or None
+        """
         if not self.is_connected:
             return None
         
@@ -101,10 +130,14 @@ class ModbusTCPClient:
             return None
 
     def read_status(self) -> Optional[bytes]:
-        """Read gripper status - placeholder for actual implementation"""
+        """
+        Read gripper status (placeholder for actual implementation).
+        Returns:
+            Simulated status bytes if connected, else None.
+        """
         # This would need to be implemented based on OnRobot's specific protocol
         # For now, return simulated data
         if self.is_connected:
-            # Simulate status response
+            # Simulate status response: [ready, position, force]
             return bytes([0x01, 0x00, 0x80, 0x00, 0x40, 0x00])  # Ready, position 128, force 64
         return None

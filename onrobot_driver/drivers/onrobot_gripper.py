@@ -13,7 +13,8 @@ from .modbus_client import ModbusTCPClient
 
 class OnRobotGripper:
     """
-    Unified OnRobot gripper controller for both simulation and hardware
+    Unified OnRobot gripper controller for both simulation and hardware.
+    Handles ROS2 interfaces, gripper state, and communication.
     """
     
     def __init__(self, node: Node):
@@ -32,7 +33,7 @@ class OnRobotGripper:
         self.node.declare_parameter('update_rate', 100.0)
         self.node.declare_parameter('simulation_mode', False)
         
-        # Get parameters
+        # Get parameters from ROS2 node
         self.gripper_type = self.node.get_parameter('gripper_type').value
         self.ip_address = self.node.get_parameter('ip_address').value
         self.port = self.node.get_parameter('port').value
@@ -47,7 +48,7 @@ class OnRobotGripper:
             self.simulation_mode = True
             self.logger.info("Auto-detected simulation mode from IP address")
         
-        # Gripper state
+        # Gripper state initialization
 
         # Start at mid position
         middle_position = (self.max_width + self.min_width) / 2  # 0.055
@@ -67,10 +68,10 @@ class OnRobotGripper:
                 self.logger.error(f"Failed to initialize Modbus client: {e}")
                 self.simulation_mode = True
         
-        # ROS2 interfaces
+        # ROS2 interfaces (publishers, action server, timer)
         self.setup_ros_interfaces()
         
-        # Setup communication
+        # Setup communication (connect to hardware if needed)
         self.setup_communication()
         
         self.logger.info(f"OnRobot {self.gripper_type} gripper initialized")
@@ -105,7 +106,7 @@ class OnRobotGripper:
     
     def setup_ros_interfaces(self):
         """Setup ROS2 publishers, subscribers, and action servers"""
-        # Publishers
+        # Publishers for gripper status and position
         # self.joint_state_pub = self.node.create_publisher(JointState, 'joint_states', 10)
         self.status_pub = self.node.create_publisher(Bool, 'gripper_status', 10)
         self.position_pub = self.node.create_publisher(Float32, 'gripper_position', 10)
@@ -124,7 +125,10 @@ class OnRobotGripper:
         self.logger.info("ROS2 interfaces initialized")
 
     def execute_action_callback(self, goal_handle):
-        """Execute gripper action command - works for both simulation and hardware"""
+        """
+        Execute gripper action command - works for both simulation and hardware.
+        Handles position and force commands, feedback, and result reporting.
+        """
         goal = goal_handle.request.command
         self.logger.info(f"Executing gripper command: position={goal.position:.3f}m, force={goal.max_effort:.1f}%")
         
@@ -141,7 +145,7 @@ class OnRobotGripper:
             goal_handle.abort()
             return self._create_result(False, True)
         
-        # Wait for movement completion
+        # Wait for movement completion with timeout
         start_time = time.time()
         timeout = 8.0 if self.simulation_mode else 15.0  # Longer timeout for hardware
         
@@ -176,7 +180,7 @@ class OnRobotGripper:
         return result
     
     def _create_feedback(self):
-        """Create feedback message"""
+        """Create feedback message for action server"""
         feedback = GripperCommand.Feedback()
         feedback.position = self.current_position
         feedback.effort = self.current_force
@@ -185,7 +189,7 @@ class OnRobotGripper:
         return feedback
     
     def _create_result(self, reached_goal, stalled):
-        """Create result message"""
+        """Create result message for action server"""
         result = GripperCommand.Result()
         result.position = self.current_position
         result.effort = self.current_force
@@ -194,16 +198,19 @@ class OnRobotGripper:
         return result
     
     def move_to_position(self, position: float, force: float = 50.0) -> bool:
-        """Move gripper to specified position"""
+        """
+        Move gripper to specified position.
+        Handles both simulation and hardware modes.
+        """
         with self.lock:
-            # Validate inputs
+            # Validate inputs and clamp to allowed range
             position = max(self.min_width, min(self.max_width, position))
             force = min(self.max_force, max(0.0, force))
             
             self.logger.info(f"Moving gripper to: {position:.3f}m, force: {force:.1f}%")
             
             if not self.simulation_mode and self.client and self.client.is_connected:
-                # Hardware mode
+                # Hardware mode: send command to hardware
                 pos_units = self.meters_to_units(position)
                 force_units = self.force_to_units(force)
                 success = self.send_gripper_command(pos_units, force_units)
@@ -211,14 +218,17 @@ class OnRobotGripper:
                     self.target_position = position
                     self.is_moving = True
             else:
-                # Simulation mode
+                # Simulation mode: simulate movement
                 success = True
                 self.simulate_movement(position, force)
             
             return success
     
     def send_gripper_command(self, position: int, force: int) -> bool:
-        """Send command to real hardware"""
+        """
+        Send command to real hardware.
+        Returns True if command was sent successfully.
+        """
         if not self.client or not self.client.is_connected:
             self.logger.error("No connection to gripper hardware")
             return False
@@ -240,8 +250,10 @@ class OnRobotGripper:
             return False
     
     def create_command_bytes(self, position: int, force: int) -> bytes:
-        """Create command bytes based on OnRobot protocol for 2FG7"""
-        # This is a simplified version - adjust based on actual OnRobot protocol
+        """
+        Create command bytes based on OnRobot protocol for 2FG7.
+        Adjust as needed for other gripper models.
+        """
         command = bytearray(8)
         
         # Command header for grip command
@@ -263,7 +275,10 @@ class OnRobotGripper:
         return bytes(command)
     
     def read_gripper_status(self) -> bool:
-        """Read current gripper status"""
+        """
+        Read current gripper status from hardware or simulation.
+        Updates internal state.
+        """
         if self.simulation_mode or not self.client or not self.client.is_connected:
             # For simulation, just return current state
             self.is_ready = True
@@ -286,7 +301,10 @@ class OnRobotGripper:
             return False
     
     def parse_status_data(self, data: list):
-        """Parse status data from gripper registers"""
+        """
+        Parse status data from gripper registers.
+        Updates internal state variables.
+        """
         if len(data) >= 3:
             status = data[0]
             position_raw = data[1]
@@ -309,7 +327,10 @@ class OnRobotGripper:
             self.logger.warning(f"Invalid status data length: {len(data)}")
     
     def simulate_movement(self, target_position: float, force: float = 50.0):
-        """Simulate gripper movement for simulation mode"""
+        """
+        Simulate gripper movement for simulation mode.
+        Runs in a background thread.
+        """
         def movement_thread():
             self.is_moving = True
             self.target_position = target_position
@@ -343,33 +364,45 @@ class OnRobotGripper:
         thread.start()
     
     def meters_to_units(self, meters: float) -> int:
-        """Convert meters to gripper units"""
+        """
+        Convert meters to gripper units (0-255).
+        """
         if self.max_width == self.min_width:
             return 0
         normalized = (meters - self.min_width) / (self.max_width - self.min_width)
         return int(normalized * 255)
     
     def units_to_meters(self, units: int) -> float:
-        """Convert gripper units to meters"""
+        """
+        Convert gripper units (0-255) to meters.
+        """
         normalized = units / 255.0
         return self.min_width + normalized * (self.max_width - self.min_width)
     
     def force_to_units(self, force: float) -> int:
-        """Convert force to gripper units"""
+        """
+        Convert force (N) to gripper units (0-255).
+        """
         normalized = force / self.max_force
         return int(normalized * 255)
     
     def units_to_force(self, units: int) -> float:
-        """Convert gripper units to force"""
+        """
+        Convert gripper units (0-255) to force (N).
+        """
         normalized = units / 255.0
         return normalized * self.max_force
     
     def timer_callback(self):
-        """Timer callback for periodic status updates"""
+        """
+        Timer callback for periodic status updates.
+        """
         self.publish_status()
     
     def publish_status(self):
-        """Publish current gripper status"""
+        """
+        Publish current gripper status and position to ROS2 topics.
+        """
         # Read actual status from gripper or simulate
         if not self.read_gripper_status():
             # If status read failed, use current state
@@ -396,7 +429,9 @@ class OnRobotGripper:
         self.position_pub.publish(position_msg)
     
     def disconnect(self):
-        """Cleanup and disconnect from hardware"""
+        """
+        Cleanup and disconnect from hardware.
+        """
         self.is_moving = False  # Stop any ongoing movement
         
         if self.client and self.client.is_connected:
