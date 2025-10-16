@@ -9,12 +9,12 @@ from std_msgs.msg import Bool, Float32
 from sensor_msgs.msg import JointState
 from control_msgs.action import GripperCommand
 
-from .modbus_client import ModbusTCPClient
+from .onrobot_client import OnRobotTCPClient
 
 class OnRobotGripper:
     """
     Unified OnRobot gripper controller for both simulation and hardware.
-    Handles ROS2 interfaces, gripper state, and communication.
+    Uses correct OnRobot protocol.
     """
     
     def __init__(self, node: Node):
@@ -25,10 +25,8 @@ class OnRobotGripper:
         self.node.declare_parameter('gripper_type', '2FG7')
         self.node.declare_parameter('ip_address', '192.168.1.1')
         self.node.declare_parameter('port', 502)
-        # CORRECTED gripper parameters for 75mm-35mm range
         self.node.declare_parameter('max_width', 0.075)    # 75mm max opening
         self.node.declare_parameter('min_width', 0.035)    # 35mm min opening
-
         self.node.declare_parameter('max_force', 100.0)
         self.node.declare_parameter('update_rate', 100.0)
         self.node.declare_parameter('simulation_mode', False)
@@ -37,8 +35,8 @@ class OnRobotGripper:
         self.gripper_type = self.node.get_parameter('gripper_type').value
         self.ip_address = self.node.get_parameter('ip_address').value
         self.port = self.node.get_parameter('port').value
-        self.max_width = self.node.get_parameter('max_width').value  # 0.075
-        self.min_width = self.node.get_parameter('min_width').value  # 0.035
+        self.max_width = self.node.get_parameter('max_width').value
+        self.min_width = self.node.get_parameter('min_width').value
         self.max_force = self.node.get_parameter('max_force').value
         self.update_rate = self.node.get_parameter('update_rate').value
         self.simulation_mode = self.node.get_parameter('simulation_mode').value
@@ -49,9 +47,7 @@ class OnRobotGripper:
             self.logger.info("Auto-detected simulation mode from IP address")
         
         # Gripper state initialization
-
-        # Start at mid position
-        middle_position = (self.max_width + self.min_width) / 2  # 0.055
+        middle_position = (self.max_width + self.min_width) / 2
         self.current_position = middle_position
         self.target_position = middle_position
         self.current_force = 0.0
@@ -63,15 +59,15 @@ class OnRobotGripper:
         self.client = None
         if not self.simulation_mode:
             try:
-                self.client = ModbusTCPClient(self.ip_address, self.port)
+                self.client = OnRobotTCPClient(self.ip_address, self.port)
             except Exception as e:
-                self.logger.error(f"Failed to initialize Modbus client: {e}")
+                self.logger.error(f"Failed to initialize OnRobot client: {e}")
                 self.simulation_mode = True
         
-        # ROS2 interfaces (publishers, action server, timer)
+        # ROS2 interfaces
         self.setup_ros_interfaces()
         
-        # Setup communication (connect to hardware if needed)
+        # Setup communication
         self.setup_communication()
         
         self.logger.info(f"OnRobot {self.gripper_type} gripper initialized")
@@ -103,11 +99,10 @@ class OnRobotGripper:
             self.logger.error(f"Hardware connection failed: {e}")
             self.logger.error("Switching to simulation mode")
             self.simulation_mode = True
-    
+
     def setup_ros_interfaces(self):
         """Setup ROS2 publishers, subscribers, and action servers"""
         # Publishers for gripper status and position
-        # self.joint_state_pub = self.node.create_publisher(JointState, 'joint_states', 10)
         self.status_pub = self.node.create_publisher(Bool, 'gripper_status', 10)
         self.position_pub = self.node.create_publisher(Float32, 'gripper_position', 10)
         
@@ -199,8 +194,7 @@ class OnRobotGripper:
     
     def move_to_position(self, position: float, force: float = 50.0) -> bool:
         """
-        Move gripper to specified position.
-        Handles both simulation and hardware modes.
+        Move gripper to specified position using correct OnRobot protocol.
         """
         with self.lock:
             # Validate inputs and clamp to allowed range
@@ -210,152 +204,73 @@ class OnRobotGripper:
             self.logger.info(f"Moving gripper to: {position:.3f}m, force: {force:.1f}%")
             
             if not self.simulation_mode and self.client and self.client.is_connected:
-                # Hardware mode: send command to hardware
+                # Hardware mode: send command using correct protocol
                 pos_units = self.meters_to_units(position)
-                force_units = self.force_to_units(force)
-                success = self.send_gripper_command(pos_units, force_units)
+                force_percent = (force / self.max_force) * 100.0
+                success = self.client.move_gripper(pos_units, force=force_percent)
+                
                 if success:
                     self.target_position = position
                     self.is_moving = True
                     return True
                 else:
+                    self.logger.error("Failed to send command to gripper")
                     return False
             else:
                 # Simulation mode: simulate movement
                 self.simulate_movement(position, force)
                 return True
-    
-    def send_gripper_command(self, position: int, force: int) -> bool:
-        """
-        Send command to real hardware.
-        Returns True if command was sent successfully.
-        """
-        if not self.client or not self.client.is_connected:
-            self.logger.error("No connection to gripper hardware")
-            return False
-        
-        try:
-            # OnRobot command structure for 2FG7 gripper
-            command = self.create_command_bytes(position, force)
-            response = self.client.send_command(command, expect_response=True)
-            
-            if response and len(response) > 0:
-                self.logger.debug("Command sent successfully to hardware")
-                self.is_moving = True
-                return True
-            else:
-                self.logger.error("No response from gripper hardware")
-                return False
-                
-        except Exception as e:
-            self.logger.error(f"Error sending gripper command: {e}")
-            return False
-    
-    def create_command_bytes(self, position: int, force: int) -> bytes:
-        """
-        Create command bytes based on OnRobot protocol for 2FG7.
-        Adjust as needed for other gripper models.
-        """
-        command = bytearray(8)
-        
-        # Command header for grip command
-        command[0] = 0x01  # Grip command
-        command[1] = 0x00
-        
-        # Position (2 bytes)
-        command[2] = position & 0xFF
-        command[3] = (position >> 8) & 0xFF
-        
-        # Speed (fixed for now, adjust as needed)
-        command[4] = 0xFF  # Maximum speed
-        command[5] = 0x00
-        
-        # Force (2 bytes)
-        command[6] = force & 0xFF
-        command[7] = (force >> 8) & 0xFF
-        
-        return bytes(command)
-    
+
     def read_gripper_status(self) -> bool:
         """
-        Read current gripper status from hardware.
-        Try multiple Modbus function codes and register addresses.
+        Read current gripper status using correct OnRobot protocol.
         """
         if self.simulation_mode or not self.client or not self.client.is_connected:
             self.is_ready = True
             return True
         
         try:
-            # Try different approaches to read status
-            
-            # Approach 1: Read Holding Registers (0x03)
-            status_data = self.client.read_holding_registers(0x0000, 3)
-            if status_data:
-                self.logger.info("✅ Status read via Holding Registers (0x03)")
+            response = self.client.read_gripper_status()
+            if response:
+                status_data = self.client.parse_status_response(response)
                 return self.parse_status_data(status_data)
-            
-            # Approach 2: Read Input Registers (0x04)  
-            status_data = self.client.read_input_registers(0x0000, 3)
-            if status_data:
-                self.logger.info("✅ Status read via Input Registers (0x04)")
-                return self.parse_status_data(status_data)
+            else:
+                self.logger.warning("No status response from gripper")
+                return False
                 
-            # Approach 3: Try different register addresses
-            for addr in [0x1000, 0x2000, 0x3000, 0x4000]:
-                status_data = self.client.read_holding_registers(addr, 3)
-                if status_data:
-                    self.logger.info(f"✅ Status read via Holding Registers at 0x{addr:04X}")
-                    return self.parse_status_data(status_data)
-                    
-                status_data = self.client.read_input_registers(addr, 3)
-                if status_data:
-                    self.logger.info(f"✅ Status read via Input Registers at 0x{addr:04X}")
-                    return self.parse_status_data(status_data)
-            
-            self.logger.warning("No status data received from gripper with any method")
-            return False
-            
         except Exception as e:
             self.logger.error(f"Error reading gripper status: {e}")
             return False
 
-    def parse_status_data(self, data: list) -> bool:
+    def parse_status_data(self, status_data: dict) -> bool:
         """
-        Parse status data from 2FG7 gripper registers.
+        Parse status data from OnRobot gripper response.
         """
-        if len(data) >= 3:
-            try:
-                status = data[0]
-                position_raw = data[1]
-                force_raw = data[2]
-                
-                # Parse 2FG7 status bits
-                self.is_ready = (status & 0x01) != 0      # Bit 0: Ready
-                self.is_moving = (status & 0x02) != 0     # Bit 1: Moving
-                object_detected = (status & 0x04) != 0    # Bit 2: Object detected
-                
-                # Convert raw values to physical units
-                self.current_position = self.units_to_meters(position_raw)
-                self.current_force = self.units_to_force(force_raw)
-                
-                self.logger.debug(f"Status: ready={self.is_ready}, moving={self.is_moving}, "
-                                f"position={self.current_position:.3f}m, force={self.current_force:.1f}N")
-                
-                # Check if we've reached target position (with tolerance)
-                if not self.is_moving and hasattr(self, 'target_position'):
-                    tolerance = 0.002  # 2mm tolerance
-                    if abs(self.current_position - self.target_position) < tolerance:
-                        self.is_moving = False
-                
-                return True
-                
-            except Exception as e:
-                self.logger.error(f"Error parsing status data: {e}")
-                return False
-        else:
-            self.logger.warning(f"Invalid status data length: {len(data)}")
+        if not status_data:
             return False
-    
+            
+        try:
+            self.is_ready = status_data.get('ready', True)
+            self.is_moving = status_data.get('moving', False)
+            
+            # Update position and force from response
+            if 'position' in status_data:
+                raw_position = status_data['position']
+                self.current_position = self.units_to_meters(raw_position)
+                
+            if 'force' in status_data:
+                raw_force = status_data['force']
+                self.current_force = self.units_to_force(raw_force)
+            
+            self.logger.debug(f"Status: ready={self.is_ready}, moving={self.is_moving}, "
+                            f"position={self.current_position:.3f}m, force={self.current_force:.1f}N")
+            
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"Error parsing status data: {e}")
+            return False
+
     def simulate_movement(self, target_position: float, force: float = 50.0):
         """
         Simulate gripper movement for simulation mode.
