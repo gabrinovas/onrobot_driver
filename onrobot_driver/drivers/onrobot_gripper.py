@@ -217,12 +217,13 @@ class OnRobotGripper:
                 if success:
                     self.target_position = position
                     self.is_moving = True
+                    return True
+                else:
+                    return False
             else:
                 # Simulation mode: simulate movement
-                success = True
                 self.simulate_movement(position, force)
-            
-            return success
+                return True
     
     def send_gripper_command(self, position: int, force: int) -> bool:
         """
@@ -240,6 +241,7 @@ class OnRobotGripper:
             
             if response and len(response) > 0:
                 self.logger.debug("Command sent successfully to hardware")
+                self.is_moving = True
                 return True
             else:
                 self.logger.error("No response from gripper hardware")
@@ -276,8 +278,8 @@ class OnRobotGripper:
     
     def read_gripper_status(self) -> bool:
         """
-        Read current gripper status from hardware or simulation.
-        Updates internal state.
+        Read current gripper status from hardware.
+        Uses OnRobot's specific Modbus register mapping for 2FG7.
         """
         if self.simulation_mode or not self.client or not self.client.is_connected:
             # For simulation, just return current state
@@ -285,13 +287,14 @@ class OnRobotGripper:
             return True
         
         try:
-            # Read status registers from gripper
-            # Address and count depend on OnRobot protocol
+            # OnRobot 2FG7 specific register addresses
+            # Address 0: Status register
+            # Address 1: Position register  
+            # Address 2: Force register
             status_data = self.client.read_holding_registers(0x0000, 3)
             
             if status_data:
-                self.parse_status_data(status_data)
-                return True
+                return self.parse_status_data(status_data)
             else:
                 self.logger.warning("No status data received from gripper")
                 return False
@@ -299,32 +302,43 @@ class OnRobotGripper:
         except Exception as e:
             self.logger.error(f"Error reading gripper status: {e}")
             return False
-    
-    def parse_status_data(self, data: list):
+
+    def parse_status_data(self, data: list) -> bool:
         """
-        Parse status data from gripper registers.
-        Updates internal state variables.
+        Parse status data from 2FG7 gripper registers.
         """
         if len(data) >= 3:
-            status = data[0]
-            position_raw = data[1]
-            force_raw = data[2]
-            
-            # Parse status bits (adjust based on actual protocol)
-            self.is_ready = (status & 0x01) != 0  # Ready flag
-            self.is_moving = (status & 0x02) != 0  # Moving flag
-            
-            # Convert raw values to physical units
-            self.current_position = self.units_to_meters(position_raw)
-            self.current_force = self.units_to_force(force_raw)
-            
-            # Check if we've reached target position (with tolerance)
-            if not self.is_moving and hasattr(self, 'target_position'):
-                tolerance = 0.002  # 2mm tolerance
-                if abs(self.current_position - self.target_position) < tolerance:
-                    self.is_moving = False
+            try:
+                status = data[0]
+                position_raw = data[1]
+                force_raw = data[2]
+                
+                # Parse 2FG7 status bits
+                self.is_ready = (status & 0x01) != 0      # Bit 0: Ready
+                self.is_moving = (status & 0x02) != 0     # Bit 1: Moving
+                object_detected = (status & 0x04) != 0    # Bit 2: Object detected
+                
+                # Convert raw values to physical units
+                self.current_position = self.units_to_meters(position_raw)
+                self.current_force = self.units_to_force(force_raw)
+                
+                self.logger.debug(f"Status: ready={self.is_ready}, moving={self.is_moving}, "
+                                f"position={self.current_position:.3f}m, force={self.current_force:.1f}N")
+                
+                # Check if we've reached target position (with tolerance)
+                if not self.is_moving and hasattr(self, 'target_position'):
+                    tolerance = 0.002  # 2mm tolerance
+                    if abs(self.current_position - self.target_position) < tolerance:
+                        self.is_moving = False
+                
+                return True
+                
+            except Exception as e:
+                self.logger.error(f"Error parsing status data: {e}")
+                return False
         else:
             self.logger.warning(f"Invalid status data length: {len(data)}")
+            return False
     
     def simulate_movement(self, target_position: float, force: float = 50.0):
         """
@@ -397,27 +411,18 @@ class OnRobotGripper:
         """
         Timer callback for periodic status updates.
         """
+        # Read actual status from gripper or simulate
+        if not self.read_gripper_status():
+            # If status read failed, use current state for simulation
+            if self.simulation_mode:
+                self.is_ready = True
+        
         self.publish_status()
     
     def publish_status(self):
         """
         Publish current gripper status and position to ROS2 topics.
         """
-        # Read actual status from gripper or simulate
-        if not self.read_gripper_status():
-            # If status read failed, use current state
-            pass
-        
-        # # Publish joint state - UPDATED to match URDF joint names
-        # joint_state = JointState()
-        # joint_state.header.stamp = self.node.get_clock().now().to_msg()
-        # joint_state.name = ['left_finger_joint', 'right_finger_joint']
-        # joint_state.position = [self.current_position / 2, self.current_position / 2]  # Split between fingers
-        # joint_state.velocity = [0.0, 0.0]
-        # joint_state.effort = [self.current_force, self.current_force]
-        
-        # self.joint_state_pub.publish(joint_state)
-        
         # Publish status
         status_msg = Bool()
         status_msg.data = self.is_ready
