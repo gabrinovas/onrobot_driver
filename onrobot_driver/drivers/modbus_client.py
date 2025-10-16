@@ -5,12 +5,10 @@ from typing import Optional, List
 
 class ModbusTCPClient:
     """
-    Modbus TCP implementation for OnRobot grippers
-    Based on OnRobot's Modbus TCP protocol
+    Corrected Modbus TCP implementation for OnRobot grippers
     """
     
-    def __init__(self, ip: str = "192.168.1.1", port: int = 502, unit_id: int = 1, timeout: float = 2.0):
-        # Initialize connection parameters
+    def __init__(self, ip: str = "192.168.1.1", port: int = 502, unit_id: int = 1, timeout: float = 5.0):
         self.ip = ip
         self.port = port
         self.unit_id = unit_id
@@ -41,20 +39,15 @@ class ModbusTCPClient:
     
     def _create_modbus_frame(self, function_code: int, data: bytes) -> bytes:
         """
-        Create a Modbus TCP frame.
-        Args:
-            function_code: Modbus function code (e.g., 0x03 for read, 0x06 for write)
-            data: Data payload for the frame
-        Returns:
-            Complete Modbus TCP frame as bytes
+        Create a proper Modbus TCP frame.
         """
         self.transaction_id = (self.transaction_id + 1) % 65536
-        length = len(data) + 2  # +2 for unit_id and function_code
+        length = len(data) + 1  # +1 for unit_id
         
         frame = struct.pack('>HHHB', 
                            self.transaction_id,  # Transaction ID
-                           0x0000,              # Protocol ID
-                           length,              # Length
+                           0x0000,              # Protocol ID (always 0 for Modbus)
+                           length,              # Length (unit_id + data)
                            self.unit_id)        # Unit ID
         
         frame += bytes([function_code]) + data
@@ -63,26 +56,41 @@ class ModbusTCPClient:
     def read_holding_registers(self, address: int, count: int) -> Optional[List[int]]:
         """
         Read holding registers from the gripper.
-        Args:
-            address: Register address to start reading from
-            count: Number of registers to read
-        Returns:
-            List of register values or None on failure
         """
         try:
+            if not self.is_connected:
+                return None
+                
             data = struct.pack('>HH', address, count)
             frame = self._create_modbus_frame(0x03, data)
             
-            response = self.send_command(frame, expect_response=True)
-            if response and len(response) >= 9:
-                byte_count = response[8]
-                if len(response) >= 9 + byte_count:
-                    values = []
-                    for i in range(0, byte_count, 2):
-                        if i + 1 < byte_count:
-                            value = struct.unpack('>H', response[9+i:9+i+2])[0]
-                            values.append(value)
-                    return values
+            self.socket.sendall(frame)
+            response = self.socket.recv(1024)
+            
+            if len(response) < 9:
+                print(f"Invalid response length: {len(response)}")
+                return None
+                
+            # Parse response: [transaction, protocol, length, unit_id, function, byte_count, data...]
+            if response[7] != 0x03:  # Check function code
+                print(f"Invalid function code in response: {response[7]}")
+                return None
+                
+            byte_count = response[8]
+            if len(response) < 9 + byte_count:
+                print(f"Response too short for byte_count {byte_count}")
+                return None
+                
+            values = []
+            for i in range(0, byte_count, 2):
+                if i + 1 < byte_count:
+                    value = struct.unpack('>H', response[9+i:9+i+2])[0]
+                    values.append(value)
+                    
+            return values
+            
+        except socket.timeout:
+            print("Error sending command: timed out")
             return None
         except Exception as e:
             print(f"Error reading holding registers: {e}")
@@ -91,53 +99,81 @@ class ModbusTCPClient:
     def write_single_register(self, address: int, value: int) -> bool:
         """
         Write a single register on the gripper.
-        Args:
-            address: Register address to write to
-            value: Value to write
-        Returns:
-            True if successful, False otherwise
         """
         try:
+            if not self.is_connected:
+                return False
+                
             data = struct.pack('>HH', address, value)
             frame = self._create_modbus_frame(0x06, data)
             
-            response = self.send_command(frame, expect_response=True)
-            return response is not None and len(response) >= 8
+            self.socket.sendall(frame)
+            response = self.socket.recv(1024)
+            
+            return len(response) >= 12  # Valid write response should be 12 bytes
+            
+        except socket.timeout:
+            print("Error sending command: timed out")
+            return False
         except Exception as e:
             print(f"Error writing single register: {e}")
             return False
     
-    def send_command(self, command: bytes, expect_response: bool = True) -> Optional[bytes]:
+    def read_input_registers(self, address: int, count: int) -> Optional[List[int]]:
         """
-        Send a command to the gripper and optionally receive a response.
-        Args:
-            command: Command bytes to send
-            expect_response: Whether to wait for a response
-        Returns:
-            Response bytes or None
+        Read input registers (function 0x04) - often used for status.
+        """
+        try:
+            if not self.is_connected:
+                return None
+                
+            data = struct.pack('>HH', address, count)
+            frame = self._create_modbus_frame(0x04, data)
+            
+            self.socket.sendall(frame)
+            response = self.socket.recv(1024)
+            
+            if len(response) < 9:
+                print(f"Invalid response length: {len(response)}")
+                return None
+                
+            if response[7] != 0x04:  # Check function code
+                print(f"Invalid function code in response: {response[7]}")
+                return None
+                
+            byte_count = response[8]
+            if len(response) < 9 + byte_count:
+                print(f"Response too short for byte_count {byte_count}")
+                return None
+                
+            values = []
+            for i in range(0, byte_count, 2):
+                if i + 1 < byte_count:
+                    value = struct.unpack('>H', response[9+i:9+i+2])[0]
+                    values.append(value)
+                    
+            return values
+            
+        except socket.timeout:
+            print("Error sending command: timed out")
+            return None
+        except Exception as e:
+            print(f"Error reading input registers: {e}")
+            return None
+
+    def send_raw_command(self, command: bytes) -> Optional[bytes]:
+        """
+        Send raw command and return response.
         """
         if not self.is_connected:
             return None
         
         try:
             self.socket.sendall(command)
-            if expect_response:
-                return self.socket.recv(1024)
+            return self.socket.recv(1024)
+        except socket.timeout:
+            print("Error sending command: timed out")
             return None
         except Exception as e:
-            print(f"Error sending command: {e}")
-            self.is_connected = False
+            print(f"Error sending raw command: {e}")
             return None
-
-    def read_status(self) -> Optional[bytes]:
-        """
-        Read gripper status (placeholder for actual implementation).
-        Returns:
-            Simulated status bytes if connected, else None.
-        """
-        # This would need to be implemented based on OnRobot's specific protocol
-        # For now, return simulated data
-        if self.is_connected:
-            # Simulate status response: [ready, position, force]
-            return bytes([0x01, 0x00, 0x80, 0x00, 0x40, 0x00])  # Ready, position 128, force 64
-        return None

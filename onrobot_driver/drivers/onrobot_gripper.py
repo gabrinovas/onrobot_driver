@@ -279,26 +279,42 @@ class OnRobotGripper:
     def read_gripper_status(self) -> bool:
         """
         Read current gripper status from hardware.
-        Uses OnRobot's specific Modbus register mapping for 2FG7.
+        Try multiple Modbus function codes and register addresses.
         """
         if self.simulation_mode or not self.client or not self.client.is_connected:
-            # For simulation, just return current state
             self.is_ready = True
             return True
         
         try:
-            # OnRobot 2FG7 specific register addresses
-            # Address 0: Status register
-            # Address 1: Position register  
-            # Address 2: Force register
-            status_data = self.client.read_holding_registers(0x0000, 3)
+            # Try different approaches to read status
             
+            # Approach 1: Read Holding Registers (0x03)
+            status_data = self.client.read_holding_registers(0x0000, 3)
             if status_data:
+                self.logger.info("✅ Status read via Holding Registers (0x03)")
                 return self.parse_status_data(status_data)
-            else:
-                self.logger.warning("No status data received from gripper")
-                return False
+            
+            # Approach 2: Read Input Registers (0x04)  
+            status_data = self.client.read_input_registers(0x0000, 3)
+            if status_data:
+                self.logger.info("✅ Status read via Input Registers (0x04)")
+                return self.parse_status_data(status_data)
                 
+            # Approach 3: Try different register addresses
+            for addr in [0x1000, 0x2000, 0x3000, 0x4000]:
+                status_data = self.client.read_holding_registers(addr, 3)
+                if status_data:
+                    self.logger.info(f"✅ Status read via Holding Registers at 0x{addr:04X}")
+                    return self.parse_status_data(status_data)
+                    
+                status_data = self.client.read_input_registers(addr, 3)
+                if status_data:
+                    self.logger.info(f"✅ Status read via Input Registers at 0x{addr:04X}")
+                    return self.parse_status_data(status_data)
+            
+            self.logger.warning("No status data received from gripper with any method")
+            return False
+            
         except Exception as e:
             self.logger.error(f"Error reading gripper status: {e}")
             return False
