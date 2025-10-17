@@ -33,7 +33,7 @@ class OnRobotGripper:
         self.node.declare_parameter('max_force', 100.0)
         self.node.declare_parameter('update_rate', 100.0)
         self.node.declare_parameter('simulation_mode', False)
-        self.node.declare_parameter('joint_name', 'gripper_joint')
+        self.node.declare_parameter('joint_name', 'left_finger_joint')
         self.node.declare_parameter('command_timeout', 10.0)
         
         # Get parameters from ROS2 node
