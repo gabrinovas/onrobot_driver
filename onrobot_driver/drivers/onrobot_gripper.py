@@ -133,12 +133,6 @@ class OnRobotGripper:
             cancel_callback=self.cancel_callback
         )
         
-        # Service for simple commands
-        # self.command_service = self.node.create_service(
-        #     GripperCommand, 'gripper_command', 
-        #     self.command_service_callback
-        # )
-        
         # Timer for periodic updates
         self.update_timer = self.node.create_timer(1.0/self.update_rate, self.update_callback)
         
@@ -423,6 +417,46 @@ class OnRobotGripper:
         thread.daemon = True
         thread.start()
     
+    def publish_status(self):
+        """
+        Publish current gripper status to ROS2 topics.
+        FIXED: Now publishes BOTH finger joints with proper mirroring
+        """
+        try:
+            # FIXED: Publish joint state with BOTH finger joints
+            joint_state = JointState()
+            joint_state.header.stamp = self.node.get_clock().now().to_msg()
+            # Both finger joints - right finger mirrors left finger
+            joint_state.name = ['left_finger_joint', 'right_finger_joint']
+            # For 2FG7, right finger moves in opposite direction
+            joint_state.position = [self.current_position, -self.current_position]
+            joint_state.velocity = [0.0, 0.0]  # We don't have velocity data
+            joint_state.effort = [self.current_force, self.current_force]
+            self.joint_state_pub.publish(joint_state)
+            
+            # Publish status
+            status_msg = Bool()
+            status_msg.data = self.is_ready
+            self.status_pub.publish(status_msg)
+            
+            # Publish position
+            position_msg = Float32()
+            position_msg.data = self.current_position
+            self.position_pub.publish(position_msg)
+            
+            # Publish connection status
+            connection_msg = Bool()
+            connection_msg.data = self.is_connected
+            self.connection_pub.publish(connection_msg)
+            
+            # Publish mode
+            mode_msg = String()
+            mode_msg.data = 'simulation' if self.simulation_mode else 'hardware'
+            self.mode_pub.publish(mode_msg)
+            
+        except Exception as e:
+            self.logger.error(f"Error publishing status: {e}")
+    
     def meters_to_units(self, meters: float) -> int:
         """
         Convert meters to gripper units (0-255).
@@ -469,43 +503,6 @@ class OnRobotGripper:
             
         except Exception as e:
             self.logger.error(f"Error in update callback: {e}")
-    
-    def publish_status(self):
-        """
-        Publish current gripper status to ROS2 topics.
-        """
-        try:
-            # Publish joint state
-            joint_state = JointState()
-            joint_state.header.stamp = self.node.get_clock().now().to_msg()
-            joint_state.name = [self.joint_name]
-            joint_state.position = [self.current_position]
-            joint_state.velocity = [0.0]  # We don't have velocity data
-            joint_state.effort = [self.current_force]
-            self.joint_state_pub.publish(joint_state)
-            
-            # Publish status
-            status_msg = Bool()
-            status_msg.data = self.is_ready
-            self.status_pub.publish(status_msg)
-            
-            # Publish position
-            position_msg = Float32()
-            position_msg.data = self.current_position
-            self.position_pub.publish(position_msg)
-            
-            # Publish connection status
-            connection_msg = Bool()
-            connection_msg.data = self.is_connected
-            self.connection_pub.publish(connection_msg)
-            
-            # Publish mode
-            mode_msg = String()
-            mode_msg.data = 'simulation' if self.simulation_mode else 'hardware'
-            self.mode_pub.publish(mode_msg)
-            
-        except Exception as e:
-            self.logger.error(f"Error publishing status: {e}")
     
     def stop(self):
         """
