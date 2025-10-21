@@ -20,11 +20,16 @@ find_package(trajectory_msgs REQUIRED)
 # Install Python package
 ament_python_install_package(${PROJECT_NAME})
 
-# Install Python scripts as executables
+# Install Python scripts as executables - FIXED: Separate install commands
 install(PROGRAMS
   scripts/control_gripper.py
-  scripts/merged_joint_state_publisher.py
   RENAME control_gripper
+  DESTINATION lib/${PROJECT_NAME}
+)
+
+install(PROGRAMS
+  scripts/merged_joint_state_publisher.py
+  RENAME merged_joint_state_publisher
   DESTINATION lib/${PROJECT_NAME}
 )
 
