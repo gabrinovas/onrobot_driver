@@ -3,7 +3,7 @@
 # Adjust these parameters to match your hardware setup and requirements.
 
 # Namespace for all parameters (applies to all nodes if using global namespace)
- /**:
+/**:
   ros__parameters:
     # Gripper model type (e.g., "2FG7", "3FG15", "VGC10", etc.)
     gripper_type: "2FG7"
@@ -14,11 +14,14 @@
     # TCP port for communication (default Modbus TCP port is 502)
     port: 502
 
-    # Maximum opening width of the gripper in meters (e.g., 0.075 = 75mm)
-    max_width: 0.075    # 75mm max opening
+    # Maximum opening width of the gripper in meters (e.g., 0.075 = 70mm)
+    max_width: 0.070    # 70mm max opening
 
     # Minimum opening width of the gripper in meters (e.g., 0.035 = 35mm)
     min_width: 0.035    # 35mm min opening
+
+    # Initial position in meters (55mm = 0.055m)
+    initial_position: 0.055
 
     # Maximum gripping force in Newtons
     max_force: 100.0

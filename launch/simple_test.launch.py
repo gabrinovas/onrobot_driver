@@ -14,8 +14,8 @@ def generate_launch_description():
                 'gripper_type': '2FG7',            # Gripper model type
                 'ip_address': '127.0.0.1',         # Localhost for simulation
                 'port': 502,                       # TCP port (default Modbus)
-                'max_width': 0.085,                # Max opening width in meters
-                'min_width': 0.0,                  # Min opening width in meters
+                'max_width': 0.070,                # Max opening width in meters
+                'min_width': 0.035,                # Min opening width in meters
                 'max_force': 100.0,                # Max gripping force in Newtons
                 'update_rate': 10.0,               # Update rate in Hz
                 'simulation_mode': True,           # Enable simulation mode

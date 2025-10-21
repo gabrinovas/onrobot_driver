@@ -28,7 +28,7 @@ class OnRobotGripper:
         self.node.declare_parameter('gripper_type', '2FG7')
         self.node.declare_parameter('ip_address', '192.168.1.1')
         self.node.declare_parameter('port', 502)
-        self.node.declare_parameter('max_width', 0.075)    # 75mm max opening
+        self.node.declare_parameter('max_width', 0.070)    # 70mm max opening
         self.node.declare_parameter('min_width', 0.035)    # 35mm min opening
         self.node.declare_parameter('max_force', 100.0)
         self.node.declare_parameter('update_rate', 100.0)
