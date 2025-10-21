@@ -86,7 +86,7 @@ class OnRobotGripper:
         self.logger.info(f"Joint name: {self.joint_name}")
     
     def setup_communication(self):
-        """Setup communication - only connect to hardware if not in simulation"""
+        """Setup communication with register discovery"""
         if self.simulation_mode:
             self.logger.info("Running in simulation mode - no hardware connection")
             self.is_connected = True
@@ -95,21 +95,30 @@ class OnRobotGripper:
         try:
             if self.client and self.client.connect():
                 self.is_connected = True
-                self.logger.info("✅ Successfully connected to OnRobot Compute Box")
+                self.logger.info("✅ Connected to OnRobot Compute Box")
                 
-                # Test communication by reading status
-                if self.read_gripper_status():
-                    self.logger.info("✅ Gripper communication test successful")
+                # Discover gripper registers
+                valid_registers = self.client.scan_onrobot_registers()
+                
+                if valid_registers:
+                    self.logger.info("✅ Gripper register discovery successful")
+                    # Test communication
+                    if self.read_gripper_status():
+                        self.logger.info("✅ Gripper communication established")
+                    else:
+                        self.logger.warning("⚠️ Initial status read failed, but continuing")
                 else:
-                    self.logger.warning("⚠️ Gripper status read failed, but continuing")
+                    self.logger.error("❌ No gripper registers found - check power and model")
+                    self.logger.error("Switching to simulation mode")
+                    self.simulation_mode = True
             else:
-                self.logger.error(f"Failed to connect to {self.ip_address}:{self.port}")
+                self.logger.error(f"❌ Failed to connect to {self.ip_address}:{self.port}")
                 self.logger.error("Switching to simulation mode")
                 self.simulation_mode = True
                 self.is_connected = True
                     
         except Exception as e:
-            self.logger.error(f"Hardware connection failed: {e}")
+            self.logger.error(f"❌ Hardware connection failed: {e}")
             self.logger.error("Switching to simulation mode")
             self.simulation_mode = True
             self.is_connected = True
@@ -273,36 +282,36 @@ class OnRobotGripper:
     
     def send_gripper_command(self, position: int, force: int) -> bool:
         """
-        Send command to real hardware.
-        Returns True if command was sent successfully.
+        Send command to OnRobot gripper using proper protocol.
         """
         if not self.client or not self.client.is_connected:
             self.logger.error("No connection to gripper hardware")
             return False
         
         try:
-            # Try different command approaches for OnRobot compatibility
-            
-            # Approach 1: Write to command register (common for OnRobot)
-            success = self.client.write_single_register(0x1000, position)
-            if success:
-                self.logger.debug("Command sent successfully via single register")
-                return True
-            
-            # Approach 2: Write position and force to consecutive registers
+            # OnRobot 2FG7 command protocol
+            # Method 1: Write to command registers (most common)
             success = self.client.write_multiple_registers(0x1000, [position, force])
             if success:
-                self.logger.debug("Command sent successfully via multiple registers")
+                self.logger.debug(f"Command sent: position={position}, force={force}")
                 return True
-                
-            # Approach 3: Try different register addresses
-            for addr in [0x0000, 0x2000, 0x3000]:
+            
+            # Method 2: Try single register writes
+            success = self.client.write_single_register(0x1000, position)
+            if success:
+                self.logger.debug(f"Position command sent: {position}")
+                # Also send force if possible
+                self.client.write_single_register(0x1001, force)
+                return True
+            
+            # Method 3: Try alternative addresses
+            for addr in [0x0000, 0x2000]:
                 success = self.client.write_single_register(addr, position)
                 if success:
-                    self.logger.debug(f"Command sent successfully via register 0x{addr:04X}")
+                    self.logger.debug(f"Command sent via 0x{addr:04X}")
                     return True
             
-            self.logger.error("All command methods failed")
+            self.logger.error("All command methods failed - check gripper model and registers")
             return False
                 
         except Exception as e:
@@ -311,7 +320,7 @@ class OnRobotGripper:
     
     def read_gripper_status(self) -> bool:
         """
-        Read current gripper status from hardware or simulation.
+        Read current gripper status using OnRobot-specific protocol.
         """
         if self.simulation_mode or not self.client or not self.client.is_connected:
             # For simulation, just return current state
@@ -319,57 +328,65 @@ class OnRobotGripper:
             return True
         
         try:
-            # Try different register addresses for status reading
-            status_addresses = [0x0000, 0x1000, 0x2000]
-            
-            for addr in status_addresses:
-                status_data = self.client.read_holding_registers(addr, 3)  # Read status, position, force
+            # OnRobot 2FG7 specific register addresses
+            # Try status register first
+            status_data = self.client.read_holding_registers(0x0000, 1)
+            if status_data:
+                status = status_data[0]
+                self.is_ready = (status & 0x0001) != 0  # Bit 0: Ready
+                self.is_moving = (status & 0x0002) != 0  # Bit 1: Moving
                 
-                if status_data and len(status_data) >= 3:
-                    return self.parse_status_data(status_data)
+                # Read position and force if available
+                pos_data = self.client.read_holding_registers(0x0001, 1)
+                if pos_data:
+                    self.current_position = self.units_to_meters(pos_data[0])
+                
+                force_data = self.client.read_holding_registers(0x0002, 1)
+                if force_data:
+                    self.current_force = self.units_to_force(force_data[0])
+                
+                self.logger.debug(f"Status: ready={self.is_ready}, moving={self.is_moving}, "
+                                f"position={self.current_position:.3f}m")
+                return True
             
-            self.logger.warning("No status data received from any register")
+            # Alternative register mapping
+            status_data = self.client.read_holding_registers(0x1000, 3)
+            if status_data and len(status_data) >= 3:
+                return self.parse_onrobot_status(status_data)
+            
+            self.logger.warning("No status data received from OnRobot gripper")
             return False
                 
         except Exception as e:
             self.logger.error(f"Error reading gripper status: {e}")
             return False
-    
-    def parse_status_data(self, data: list) -> bool:
+
+    def parse_onrobot_status(self, data: list) -> bool:
         """
-        Parse status data from gripper registers.
-        Updates internal state variables.
+        Parse OnRobot-specific status data.
         """
-        if len(data) >= 3:
-            try:
-                status = data[0]
-                position_raw = data[1]
-                force_raw = data[2]
-                
-                # Parse status bits (adjust based on actual protocol)
-                self.is_ready = (status & 0x01) != 0  # Ready flag
-                self.is_moving = (status & 0x02) != 0  # Moving flag
-                
-                # Convert raw values to physical units
-                self.current_position = self.units_to_meters(position_raw)
-                self.current_force = self.units_to_force(force_raw)
-                
-                # Check if we've reached target position (with tolerance)
-                if not self.is_moving and hasattr(self, 'target_position'):
-                    tolerance = 0.002  # 2mm tolerance
-                    if abs(self.current_position - self.target_position) < tolerance:
-                        self.is_moving = False
-                
-                self.logger.debug(f"Status: ready={self.is_ready}, moving={self.is_moving}, "
-                                f"position={self.current_position:.3f}m, force={self.current_force:.1f}N")
-                
-                return True
-                
-            except Exception as e:
-                self.logger.error(f"Error parsing status data: {e}")
-                return False
-        else:
-            self.logger.warning(f"Invalid status data length: {len(data)}")
+        try:
+            # OnRobot status register mapping
+            status = data[0]
+            position_raw = data[1] if len(data) > 1 else 0
+            force_raw = data[2] if len(data) > 2 else 0
+            
+            # Parse status bits for OnRobot grippers
+            self.is_ready = (status & 0x0001) != 0    # Ready flag
+            self.is_moving = (status & 0x0002) != 0   # Moving flag
+            object_detected = (status & 0x0004) != 0  # Object detected
+            
+            # Convert raw values
+            self.current_position = self.units_to_meters(position_raw)
+            self.current_force = self.units_to_force(force_raw)
+            
+            self.logger.debug(f"OnRobot Status: ready={self.is_ready}, moving={self.is_moving}, "
+                             f"object_detected={object_detected}, pos={self.current_position:.3f}m")
+            
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"Error parsing OnRobot status: {e}")
             return False
     
     def simulate_movement(self, target_position: float, force: float = 50.0):
