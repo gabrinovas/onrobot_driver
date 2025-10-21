@@ -38,7 +38,7 @@ class MergedJointStatePublisher(Node):
         self.merged_pub = self.create_publisher(JointState, 'joint_states', 10)
         
         # Timer for periodic merging (in case we miss some messages)
-        self.merge_timer = self.create_timer(0.1, self.timer_callback)  # 10 Hz
+        self.merge_timer = self.create_timer(0.02, self.timer_callback)  # 50 Hz for better synchronization
         
         self.get_logger().info("Merged joint state publisher started")
         self.get_logger().info("Listening to: arm_joint_states, gripper_joint_states")
@@ -63,38 +63,41 @@ class MergedJointStatePublisher(Node):
     
     def publish_merged(self):
         """Publish merged joint states if we have data from both sources"""
-        if self.arm_joint_state is not None and self.gripper_joint_state is not None:
-            merged = JointState()
-            merged.header.stamp = self.get_clock().now().to_msg()
-            merged.header.frame_id = ""  # No specific frame
-            
-            # Combine arm and gripper joints
-            merged.name = (self.arm_joint_state.name + 
-                         self.gripper_joint_state.name)
-            merged.position = (self.arm_joint_state.position + 
-                             self.gripper_joint_state.position)
-            merged.velocity = (self.arm_joint_state.velocity + 
-                             self.gripper_joint_state.velocity)
-            merged.effort = (self.arm_joint_state.effort + 
-                           self.gripper_joint_state.effort)
-            
+        merged = JointState()
+        merged.header.stamp = self.get_clock().now().to_msg()
+        merged.header.frame_id = ""  # No specific frame
+        
+        # Start with empty lists
+        merged.name = []
+        merged.position = []
+        merged.velocity = []
+        merged.effort = []
+        
+        # Add arm joints if available
+        if self.arm_joint_state is not None:
+            merged.name.extend(self.arm_joint_state.name)
+            merged.position.extend(self.arm_joint_state.position)
+            merged.velocity.extend(self.arm_joint_state.velocity)
+            merged.effort.extend(self.arm_joint_state.effort)
+        
+        # Add gripper joints if available  
+        if self.gripper_joint_state is not None:
+            merged.name.extend(self.gripper_joint_state.name)
+            merged.position.extend(self.gripper_joint_state.position)
+            merged.velocity.extend(self.gripper_joint_state.velocity)
+            merged.effort.extend(self.gripper_joint_state.effort)
+        
+        # Only publish if we have at least some joints
+        if merged.name:
             self.merged_pub.publish(merged)
             
-            # Debug logging (comment out in production)
-            self.get_logger().debug(f"Published merged state with {len(merged.name)} joints", 
-                                  throttle_duration_sec=5.0)
-        
-        elif self.arm_joint_state is not None:
-            # Only arm data available - publish just arm states
-            self.merged_pub.publish(self.arm_joint_state)
-            self.get_logger().warn("Only arm joint states available", 
-                                 throttle_duration_sec=5.0)
-        
-        elif self.gripper_joint_state is not None:
-            # Only gripper data available - publish just gripper states  
-            self.merged_pub.publish(self.gripper_joint_state)
-            self.get_logger().warn("Only gripper joint states available", 
-                                 throttle_duration_sec=5.0)
+            # Debug logging - uncomment for troubleshooting
+            if len(merged.name) >= 8:  # Should have 6 arm + 2 gripper joints
+                self.get_logger().debug(f"✅ Published merged state with {len(merged.name)} joints", 
+                                      throttle_duration_sec=5.0)
+            else:
+                self.get_logger().warn(f"⚠️ Incomplete joint state: {len(merged.name)} joints", 
+                                     throttle_duration_sec=5.0)
 
 def main():
     rclpy.init()
