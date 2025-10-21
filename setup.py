@@ -22,6 +22,8 @@ setup(
          glob('config/*.yaml')),
         (os.path.join('share', package_name, 'test'),
          glob('test/*.py')),
+        (os.path.join('share', package_name, 'scripts'),
+         glob('scripts/*.py')),
     ],
     install_requires=['setuptools'],
     zip_safe=True,
@@ -34,6 +36,7 @@ setup(
         'console_scripts': [
             'onrobot_driver_node = onrobot_driver.nodes.onrobot_driver_node:main',
             'control_gripper = onrobot_driver.scripts.control_gripper:main',
+            'merged_joint_state_publisher = onrobot_driver.scripts.merged_joint_state_publisher:main',
         ],
     },
 )

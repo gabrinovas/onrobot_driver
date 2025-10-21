@@ -23,6 +23,7 @@ ament_python_install_package(${PROJECT_NAME})
 # Install Python scripts as executables
 install(PROGRAMS
   scripts/control_gripper.py
+  scripts/merged_joint_state_publisher.py
   RENAME control_gripper
   DESTINATION lib/${PROJECT_NAME}
 )

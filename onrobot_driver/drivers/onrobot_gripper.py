@@ -111,7 +111,7 @@ class OnRobotGripper:
                 self.joint_state_pub.publish(joint_state)
                 time.sleep(0.1)
                 
-            self.logger.info("Initial gripper joint state published")
+            self.logger.info("Initial gripper joint state published to gripper_joint_states")
             
         except Exception as e:
             self.logger.error(f"Error publishing initial joint state: {e}")
@@ -156,8 +156,8 @@ class OnRobotGripper:
     
     def setup_ros_interfaces(self):
         """Setup ROS2 publishers, subscribers, and action servers"""
-        # FIXED: Publish to the main joint_states topic that MoveIt expects
-        self.joint_state_pub = self.node.create_publisher(JointState, 'joint_states', 10)
+        # FIXED: Publish to gripper_joint_states topic (will be merged later)
+        self.joint_state_pub = self.node.create_publisher(JointState, 'gripper_joint_states', 10)
         
         # Additional status topics for monitoring
         self.status_pub = self.node.create_publisher(Bool, 'gripper_status', 10)
@@ -470,10 +470,10 @@ class OnRobotGripper:
     def publish_status(self):
         """
         Publish current gripper status to ROS2 topics.
-        FIXED: Now publishes BOTH finger joints to /joint_states topic
+        FIXED: Now publishes BOTH finger joints to gripper_joint_states topic
         """
         try:
-            # FIXED: Publish to the MAIN joint_states topic that MoveIt expects
+            # FIXED: Publish to gripper_joint_states topic (will be merged)
             joint_state = JointState()
             joint_state.header.stamp = self.node.get_clock().now().to_msg()
             
@@ -492,7 +492,7 @@ class OnRobotGripper:
             joint_state.velocity = [0.0, 0.0]  # We don't have velocity data
             joint_state.effort = [self.current_force, self.current_force]
             
-            # Publish to the main joint_states topic
+            # Publish to the gripper_joint_states topic
             self.joint_state_pub.publish(joint_state)
             
             # Also publish individual status topics for monitoring
