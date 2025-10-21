@@ -30,7 +30,7 @@ class OnRobotGripper:
         self.node.declare_parameter('port', 502)
         self.node.declare_parameter('max_width', 0.070)    # 70mm max opening
         self.node.declare_parameter('min_width', 0.035)    # 35mm min opening
-        self.node.declare_parameter('max_force', 100.0)
+        self.node.declare_parameter('max_force', 140.0)
         self.node.declare_parameter('update_rate', 100.0)
         self.node.declare_parameter('simulation_mode', False)
         self.node.declare_parameter('joint_name', 'left_finger_joint')
@@ -53,8 +53,8 @@ class OnRobotGripper:
             self.simulation_mode = True
             self.logger.info("Auto-detected simulation mode from IP address")
         
-        # Gripper state initialization
-        self.current_position = (self.max_width + self.min_width) / 2  # Start at middle
+        # Gripper state initialization - start at 55mm (middle position)
+        self.current_position = 0.055  # 55mm initial opening
         self.target_position = self.current_position
         self.current_force = 0.0
         self.is_ready = True
@@ -76,6 +76,9 @@ class OnRobotGripper:
         # ROS2 interfaces
         self.setup_ros_interfaces()
         
+        # Publish initial joint state immediately to prevent MoveIt warnings
+        self.publish_initial_joint_state()
+        
         # Setup communication
         self.setup_communication()
         
@@ -84,6 +87,34 @@ class OnRobotGripper:
         self.logger.info(f"IP: {self.ip_address}, Port: {self.port}")
         self.logger.info(f"Width range: {self.min_width:.3f}m to {self.max_width:.3f}m")
         self.logger.info(f"Joint name: {self.joint_name}")
+    
+    def publish_initial_joint_state(self):
+        """
+        Publish initial joint state immediately to prevent MoveIt warnings.
+        """
+        try:
+            joint_state = JointState()
+            joint_state.header.stamp = self.node.get_clock().now().to_msg()
+            joint_state.header.frame_id = ""  # Empty frame id
+            joint_state.name = ['left_finger_joint', 'right_finger_joint']
+            
+            # Start at 55mm opening
+            left_pos = self.meters_to_joint_position(0.055)
+            right_pos = -left_pos
+            
+            joint_state.position = [left_pos, right_pos]
+            joint_state.velocity = [0.0, 0.0]
+            joint_state.effort = [0.0, 0.0]
+            
+            # Publish immediately and a few more times to ensure reception
+            for i in range(3):
+                self.joint_state_pub.publish(joint_state)
+                time.sleep(0.1)
+                
+            self.logger.info("Initial gripper joint state published")
+            
+        except Exception as e:
+            self.logger.error(f"Error publishing initial joint state: {e}")
     
     def setup_communication(self):
         """Setup communication with register discovery"""
@@ -125,8 +156,10 @@ class OnRobotGripper:
     
     def setup_ros_interfaces(self):
         """Setup ROS2 publishers, subscribers, and action servers"""
-        # Publishers for gripper status
+        # FIXED: Publish to the main joint_states topic that MoveIt expects
         self.joint_state_pub = self.node.create_publisher(JointState, 'joint_states', 10)
+        
+        # Additional status topics for monitoring
         self.status_pub = self.node.create_publisher(Bool, 'gripper_status', 10)
         self.position_pub = self.node.create_publisher(Float32, 'gripper_position', 10)
         self.connection_pub = self.node.create_publisher(Bool, 'gripper_connected', 10)
@@ -437,36 +470,44 @@ class OnRobotGripper:
     def publish_status(self):
         """
         Publish current gripper status to ROS2 topics.
-        FIXED: Now publishes BOTH finger joints with proper mirroring
+        FIXED: Now publishes BOTH finger joints to /joint_states topic
         """
         try:
-            # FIXED: Publish joint state with BOTH finger joints
+            # FIXED: Publish to the MAIN joint_states topic that MoveIt expects
             joint_state = JointState()
             joint_state.header.stamp = self.node.get_clock().now().to_msg()
-            # Both finger joints - right finger mirrors left finger
+            
+            # Include BOTH finger joints
             joint_state.name = ['left_finger_joint', 'right_finger_joint']
-            # For 2FG7, right finger moves in opposite direction
-            joint_state.position = [self.current_position, -self.current_position]
+            
+            # Convert width to joint positions for 2FG7:
+            # - Total width = left_position - right_position  
+            # - For 55mm (0.055m) opening: left=0.0075, right=-0.0075
+            # - For 70mm (0.070m) opening: left=0.0175, right=-0.0175  
+            # - For 35mm (0.035m) opening: left=0.0, right=0.0
+            left_pos = self.meters_to_joint_position(self.current_position)
+            right_pos = -left_pos  # Mirror for right finger
+            
+            joint_state.position = [left_pos, right_pos]
             joint_state.velocity = [0.0, 0.0]  # We don't have velocity data
             joint_state.effort = [self.current_force, self.current_force]
+            
+            # Publish to the main joint_states topic
             self.joint_state_pub.publish(joint_state)
             
-            # Publish status
+            # Also publish individual status topics for monitoring
             status_msg = Bool()
             status_msg.data = self.is_ready
             self.status_pub.publish(status_msg)
             
-            # Publish position
             position_msg = Float32()
             position_msg.data = self.current_position
             self.position_pub.publish(position_msg)
             
-            # Publish connection status
             connection_msg = Bool()
             connection_msg.data = self.is_connected
             self.connection_pub.publish(connection_msg)
             
-            # Publish mode
             mode_msg = String()
             mode_msg.data = 'simulation' if self.simulation_mode else 'hardware'
             self.mode_pub.publish(mode_msg)
@@ -503,6 +544,24 @@ class OnRobotGripper:
         """
         normalized = units / 255.0
         return normalized * self.max_force
+
+    def meters_to_joint_position(self, meters: float) -> float:
+        """
+        Convert gripper width in meters to left_finger_joint position.
+        Range: 0.035m (closed) to 0.070m (open)
+        Joint range: 0.0 to 0.0175
+        """
+        if self.max_width == self.min_width:
+            return 0.0
+        normalized = (meters - self.min_width) / (self.max_width - self.min_width)
+        return normalized * 0.0175
+    
+    def joint_position_to_meters(self, joint_pos: float) -> float:
+        """
+        Convert left_finger_joint position to gripper width in meters.
+        """
+        normalized = joint_pos / 0.0175
+        return self.min_width + normalized * (self.max_width - self.min_width)
     
     def update_callback(self):
         """
