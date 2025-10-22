@@ -13,8 +13,8 @@
     # TCP port for simulation (use a non-standard port to avoid conflicts)
     port: 1502
 
-    # Maximum opening width of the gripper in meters (e.g., 0.075 = 75mm)
-    max_width: 0.075    # 75mm max opening
+    # Maximum opening width of the gripper in meters (e.g., 0.070 = 70mm)
+    max_width: 0.070    # 70mm max opening
 
     # Minimum opening width of the gripper in meters (e.g., 0.035 = 35mm)
     min_width: 0.035    # 35mm min opening
