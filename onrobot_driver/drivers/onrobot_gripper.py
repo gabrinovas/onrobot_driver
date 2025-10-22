@@ -420,17 +420,15 @@ class OnRobotGripper:
     def publish_status(self):
         """
         Publish current gripper status to ROS2 topics.
-        FIXED: Now publishes BOTH finger joints with proper mirroring
+        FIXED: URDF already handles mirroring, so publish same position for both
         """
         try:
-            # FIXED: Publish joint state with BOTH finger joints
             joint_state = JointState()
             joint_state.header.stamp = self.node.get_clock().now().to_msg()
-            # Both finger joints - right finger mirrors left finger
             joint_state.name = ['left_finger_joint', 'right_finger_joint']
-            # For 2FG7, right finger moves in opposite direction
-            joint_state.position = [self.current_position, -self.current_position]
-            joint_state.velocity = [0.0, 0.0]  # We don't have velocity data
+            # URDF already positions fingers symmetrically, so use same position
+            joint_state.position = [self.current_position, self.current_position]
+            joint_state.velocity = [0.0, 0.0]
             joint_state.effort = [self.current_force, self.current_force]
             self.joint_state_pub.publish(joint_state)
             
