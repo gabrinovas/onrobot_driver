@@ -14,6 +14,8 @@ class OnRobotDriverNode(Node):
         self.gripper = OnRobotGripper(self)
         
         self.get_logger().info(f"OnRobot driver node started with gripper_type: {self.gripper.gripper_type}")
+        self.get_logger().info(f"Simulation mode: {self.gripper.simulation_mode}")
+        self.get_logger().info(f"Connected: {self.gripper.is_connected}")
     
     def destroy_node(self):
         """Cleanup before shutdown"""

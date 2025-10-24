@@ -60,6 +60,7 @@ class OnRobotGripper:
         self.is_ready = True
         self.is_moving = False
         self.is_connected = False
+        self.grip_detected = False
         self.last_update_time = self.node.get_clock().now()
         self.lock = Lock()
         
@@ -86,7 +87,7 @@ class OnRobotGripper:
         self.logger.info(f"Joint name: {self.joint_name}")
     
     def setup_communication(self):
-        """Setup communication - only connect to hardware if not in simulation"""
+        """Setup communication - with better error handling"""
         if self.simulation_mode:
             self.logger.info("Running in simulation mode - no hardware connection")
             self.is_connected = True
@@ -97,20 +98,29 @@ class OnRobotGripper:
                 self.is_connected = True
                 self.logger.info("✅ Successfully connected to OnRobot Compute Box")
                 
-                # Test communication by reading status
-                if self.read_gripper_status():
+                # Test communication with better diagnostics
+                if self.client.test_communication():
                     self.logger.info("✅ Gripper communication test successful")
+                    
+                    # Try to read initial status
+                    if self.read_gripper_status():
+                        self.logger.info("✅ Initial gripper status read successful")
+                    else:
+                        self.logger.warning("⚠️ Initial status read failed, but continuing")
                 else:
-                    self.logger.warning("⚠️ Gripper status read failed, but continuing")
+                    self.logger.error("❌ Gripper communication test failed")
+                    self.logger.info("Switching to simulation mode")
+                    self.simulation_mode = True
+                    self.is_connected = True
             else:
                 self.logger.error(f"Failed to connect to {self.ip_address}:{self.port}")
-                self.logger.error("Switching to simulation mode")
+                self.logger.info("Switching to simulation mode")
                 self.simulation_mode = True
                 self.is_connected = True
                     
         except Exception as e:
             self.logger.error(f"Hardware connection failed: {e}")
-            self.logger.error("Switching to simulation mode")
+            self.logger.info("Switching to simulation mode")
             self.simulation_mode = True
             self.is_connected = True
     
@@ -122,6 +132,7 @@ class OnRobotGripper:
         self.position_pub = self.node.create_publisher(Float32, 'gripper_position', 10)
         self.connection_pub = self.node.create_publisher(Bool, 'gripper_connected', 10)
         self.mode_pub = self.node.create_publisher(String, 'gripper_mode', 10)
+        self.grip_detected_pub = self.node.create_publisher(Bool, 'gripper_grip_detected', 10)
         
         # Action server for gripper commands
         self.action_server = ActionServer(
@@ -297,6 +308,7 @@ class OnRobotGripper:
     def read_gripper_status(self) -> bool:
         """
         Read current gripper status from hardware or simulation.
+        UPDATED: Uses the actual 2FG7 variables provided.
         """
         if self.simulation_mode or not self.client or not self.client.is_connected:
             # For simulation, just return current state
@@ -304,15 +316,33 @@ class OnRobotGripper:
             return True
         
         try:
-            # Use the new status reading method
+            # Read the actual 2FG7 variables
             status_data = self.client.read_gripper_status()
             
             if status_data:
-                return self.parse_status_data([
-                    status_data['status'],
-                    status_data['width_actual'], 
-                    status_data['force_actual']
-                ])
+                self.logger.debug(f"Raw status data: {status_data}")
+                return self.parse_status_data(status_data)
+            
+            # If no status data, try reading individual variables
+            self.logger.warning("No status data received, trying individual variable reads...")
+            
+            try:
+                # Read individual 2FG7 variables
+                busy = self.client.read_holding_registers(0x07D0, 1)  # twofg_Busy
+                width = self.client.read_holding_registers(0x07D1, 1)  # twofg_Width_ext
+                force = self.client.read_holding_registers(0x07D2, 1)  # twofg_Force
+                grip_detected = self.client.read_holding_registers(0x07D3, 1)  # twofg_Grip_detected
+                
+                if busy and width and force:
+                    status_data = {
+                        'busy': busy[0],
+                        'width': width[0],
+                        'force': force[0],
+                        'grip_detected': grip_detected[0] if grip_detected else 0
+                    }
+                    return self.parse_status_data(status_data)
+            except Exception as e:
+                self.logger.warning(f"Individual variable read failed: {e}")
             
             self.logger.warning("No status data received from gripper")
             return False
@@ -320,42 +350,46 @@ class OnRobotGripper:
         except Exception as e:
             self.logger.error(f"Error reading gripper status: {e}")
             return False
-    
-    def parse_status_data(self, data: list) -> bool:
+
+    def parse_status_data(self, status_data: dict) -> bool:
         """
-        Parse status data from gripper registers.
-        Updates internal state variables.
+        Parse status data from 2FG7 gripper variables.
+        UPDATED: Uses the actual variable names provided.
         """
-        if len(data) >= 3:
-            try:
-                status = data[0]
-                position_raw = data[1]
-                force_raw = data[2]
-                
-                # Parse status bits (adjust based on actual protocol)
-                self.is_ready = (status & 0x01) != 0  # Ready flag
-                self.is_moving = (status & 0x02) != 0  # Moving flag
-                
-                # Convert raw values to physical units
-                self.current_position = self.units_to_meters(position_raw)
-                self.current_force = self.units_to_force(force_raw)
-                
-                # Check if we've reached target position (with tolerance)
-                if not self.is_moving and hasattr(self, 'target_position'):
-                    tolerance = 0.002  # 2mm tolerance
-                    if abs(self.current_position - self.target_position) < tolerance:
-                        self.is_moving = False
-                
-                self.logger.debug(f"Status: ready={self.is_ready}, moving={self.is_moving}, "
-                                f"position={self.current_position:.3f}m, force={self.current_force:.1f}N")
-                
-                return True
-                
-            except Exception as e:
-                self.logger.error(f"Error parsing status data: {e}")
-                return False
-        else:
-            self.logger.warning(f"Invalid status data length: {len(data)}")
+        try:
+            # Extract the actual 2FG7 variables
+            busy = status_data.get('busy', 0)
+            width_raw = status_data.get('width', 0)  # twofg_Width_ext
+            force_raw = status_data.get('force', 0)  # twofg_Force
+            grip_detected = status_data.get('grip_detected', 0)  # twofg_Grip_detected
+            
+            # Parse status based on twofg_Busy
+            # Busy values: 0=ready, 1=busy/moving, 2=error?
+            self.is_ready = (busy == 0)  # Ready when not busy
+            self.is_moving = (busy == 1)  # Moving when busy
+            
+            # Parse grip detection
+            self.grip_detected = (grip_detected == 1)  # 1=grip detected, 0=no grip
+            
+            # Convert raw values to physical units
+            # twofg_Width_ext: 0-255 corresponds to 0-70mm
+            self.current_position = self.units_to_meters(width_raw)
+            self.current_force = self.units_to_force(force_raw)
+            
+            # Check if we've reached target position (with tolerance)
+            if not self.is_moving and hasattr(self, 'target_position'):
+                tolerance = 0.002  # 2mm tolerance
+                if abs(self.current_position - self.target_position) < tolerance:
+                    self.is_moving = False
+            
+            self.logger.debug(f"Status: busy={busy}, ready={self.is_ready}, moving={self.is_moving}, "
+                            f"grip_detected={self.grip_detected}, "
+                            f"position={self.current_position:.3f}m, force={self.current_force:.1f}N")
+            
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"Error parsing status data: {e}")
             return False
     
     def simulate_movement(self, target_position: float, force: float = 50.0):
@@ -406,7 +440,6 @@ class OnRobotGripper:
     def publish_status(self):
         """
         Publish current gripper status to ROS2 topics.
-        FIXED: URDF already handles mirroring, so publish same position for both
         """
         try:
             joint_state = JointState()
@@ -437,6 +470,11 @@ class OnRobotGripper:
             mode_msg = String()
             mode_msg.data = 'simulation' if self.simulation_mode else 'hardware'
             self.mode_pub.publish(mode_msg)
+            
+            # Publish grip detection
+            grip_msg = Bool()
+            grip_msg.data = self.grip_detected
+            self.grip_detected_pub.publish(grip_msg)
             
         except Exception as e:
             self.logger.error(f"Error publishing status: {e}")
@@ -540,6 +578,7 @@ class OnRobotGripper:
             'is_ready': self.is_ready,
             'is_moving': self.is_moving,
             'is_connected': self.is_connected,
+            'grip_detected': self.grip_detected,
             'simulation_mode': self.simulation_mode,
             'gripper_type': self.gripper_type,
             'min_width': self.min_width,
