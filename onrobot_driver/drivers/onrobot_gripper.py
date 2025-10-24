@@ -281,29 +281,14 @@ class OnRobotGripper:
             return False
         
         try:
-            # Try different command approaches for OnRobot compatibility
-            
-            # Approach 1: Write to command register (common for OnRobot)
-            success = self.client.write_single_register(0x1000, position)
+            # Use the new command method
+            success = self.client.send_gripper_command(position, force)
             if success:
-                self.logger.debug("Command sent successfully via single register")
+                self.logger.debug("Gripper command sent successfully")
                 return True
-            
-            # Approach 2: Write position and force to consecutive registers
-            success = self.client.write_multiple_registers(0x1000, [position, force])
-            if success:
-                self.logger.debug("Command sent successfully via multiple registers")
-                return True
-                
-            # Approach 3: Try different register addresses
-            for addr in [0x0000, 0x2000, 0x3000]:
-                success = self.client.write_single_register(addr, position)
-                if success:
-                    self.logger.debug(f"Command sent successfully via register 0x{addr:04X}")
-                    return True
-            
-            self.logger.error("All command methods failed")
-            return False
+            else:
+                self.logger.error("Failed to send gripper command")
+                return False
                 
         except Exception as e:
             self.logger.error(f"Error sending gripper command: {e}")
@@ -319,16 +304,17 @@ class OnRobotGripper:
             return True
         
         try:
-            # Try different register addresses for status reading
-            status_addresses = [0x0000, 0x1000, 0x2000]
+            # Use the new status reading method
+            status_data = self.client.read_gripper_status()
             
-            for addr in status_addresses:
-                status_data = self.client.read_holding_registers(addr, 3)  # Read status, position, force
-                
-                if status_data and len(status_data) >= 3:
-                    return self.parse_status_data(status_data)
+            if status_data:
+                return self.parse_status_data([
+                    status_data['status'],
+                    status_data['width_actual'], 
+                    status_data['force_actual']
+                ])
             
-            self.logger.warning("No status data received from any register")
+            self.logger.warning("No status data received from gripper")
             return False
                 
         except Exception as e:

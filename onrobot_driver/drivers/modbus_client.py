@@ -7,8 +7,18 @@ import threading
 class ModbusTCPClient:
     """
     Corrected Modbus TCP client for OnRobot Compute Box.
-    Based on actual Modbus TCP standard with proper error handling.
+    Based on actual OnRobot 2FG7 Modbus protocol.
     """
+    
+    # OnRobot 2FG7 specific register mappings
+    ONROBOT_2FG7_REGISTERS = {
+        'status': 0x07D0,        # Status register
+        'width_actual': 0x07D1,  # Actual width (0-255)
+        'force_actual': 0x07D2,  # Actual force (0-255)
+        'width_target': 0x07D3,  # Target width (0-255)
+        'force_target': 0x07D4,  # Target force (0-255)
+        'control': 0x07D5,       # Control register
+    }
     
     def __init__(self, ip: str = "192.168.1.1", port: int = 502, unit_id: int = 1, timeout: float = 5.0):
         self.ip = ip
@@ -115,7 +125,6 @@ class ModbusTCPClient:
     def read_holding_registers(self, address: int, count: int) -> Optional[List[int]]:
         """
         Read holding registers (function 0x03).
-        Try different register mappings for OnRobot grippers.
         """
         if not self.is_connected:
             return None
@@ -128,7 +137,7 @@ class ModbusTCPClient:
                 
                 # Send and receive
                 self.socket.sendall(frame)
-                response = self.socket.recv(256)  # Modbus responses are typically small
+                response = self.socket.recv(256)
                 
                 return self._parse_modbus_response(response, 0x03)
                 
@@ -197,6 +206,39 @@ class ModbusTCPClient:
             except Exception as e:
                 print(f"❌ Error writing single register: {e}")
                 return False
+
+    def read_gripper_status(self) -> Optional[dict]:
+        """
+        Read all gripper status registers at once.
+        Returns dict with status, width_actual, force_actual.
+        """
+        try:
+            # Read all status registers in one go
+            result = self.read_holding_registers(self.ONROBOT_2FG7_REGISTERS['status'], 3)
+            if result and len(result) >= 3:
+                return {
+                    'status': result[0],
+                    'width_actual': result[1],
+                    'force_actual': result[2]
+                }
+            return None
+        except Exception as e:
+            print(f"❌ Error reading gripper status: {e}")
+            return None
+
+    def send_gripper_command(self, width_target: int, force_target: int) -> bool:
+        """
+        Send gripper command to target width and force.
+        """
+        try:
+            # Write to both target registers
+            return self.write_multiple_registers(
+                self.ONROBOT_2FG7_REGISTERS['width_target'], 
+                [width_target, force_target]
+            )
+        except Exception as e:
+            print(f"❌ Error sending gripper command: {e}")
+            return False
 
     def scan_registers(self, start_addr: int = 0, count: int = 10) -> dict:
         """
