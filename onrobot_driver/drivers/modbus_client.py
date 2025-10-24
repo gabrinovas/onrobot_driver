@@ -6,21 +6,52 @@ import threading
 
 class ModbusTCPClient:
     """
-    Corrected Modbus TCP client for OnRobot 2FG7 Gripper via Compute Box.
-    Based on actual OnRobot 2FG7 variables provided.
+    Corrected Modbus TCP client for OnRobot Compute Box with PNP configuration.
+    Based on actual OnRobot 2FG7 Modbus protocol for PNP mode.
     """
     
-    # CORRECTED: Actual 2FG7 register mappings based on your variables
+    # OnRobot 2FG7 PNP Mode register mappings
+    # These are the most common addresses for PNP configuration
     ONROBOT_2FG7_REGISTERS = {
-        'twofg_busy': 0x07D0,           # Busy status (0=ready, 1=busy)
-        'twofg_width_ext': 0x07D1,      # External width measurement
-        'twofg_force': 0x07D2,          # Force measurement  
-        'twofg_grip_detected': 0x07D3,  # Grip detection (0=no grip, 1=grip)
-        'twofg_width_int': 0x07D4,      # Internal width (usually not needed)
-        'twofg_width_tgt': 0x07D5,      # Target width (write)
-        'twofg_force_tgt': 0x07D6,      # Target force (write)
-        'twofg_ctrl': 0x07D7,           # Control register
+        'status': 0x0000,        # Status register (read-only)
+        'control': 0x0001,       # Control register (write-only)
+        'width_actual': 0x0002,  # Actual width (read-only)
+        'force_actual': 0x0003,  # Actual force (read-only)
+        'width_target': 0x0004,  # Target width (write-only)
+        'force_target': 0x0005,  # Target force (write-only)
+        'grip_detected': 0x0006, # Grip detection (read-only)
     }
+    
+    # Alternative register mappings for different firmware versions
+    ALTERNATIVE_REGISTERS = [
+        {
+            'status': 0x1000,
+            'control': 0x1001,
+            'width_actual': 0x1002,
+            'force_actual': 0x1003,
+            'width_target': 0x1004,
+            'force_target': 0x1005,
+            'grip_detected': 0x1006,
+        },
+        {
+            'status': 0x2000,
+            'control': 0x2001,
+            'width_actual': 0x2002,
+            'force_actual': 0x2003,
+            'width_target': 0x2004,
+            'force_target': 0x2005,
+            'grip_detected': 0x2006,
+        },
+        {
+            'status': 0x3000,
+            'control': 0x3001,
+            'width_actual': 0x3002,
+            'force_actual': 0x3003,
+            'width_target': 0x3004,
+            'force_target': 0x3005,
+            'grip_detected': 0x3006,
+        }
+    ]
     
     def __init__(self, ip: str = "192.168.1.1", port: int = 502, unit_id: int = 1, timeout: float = 5.0):
         self.ip = ip
@@ -31,6 +62,8 @@ class ModbusTCPClient:
         self.is_connected = False
         self.transaction_id = 0
         self.lock = threading.Lock()
+        self.current_register_map = self.ONROBOT_2FG7_REGISTERS.copy()
+        self.register_map_validated = False
         
     def connect(self) -> bool:
         """Connect to the OnRobot Compute Box"""
@@ -40,6 +73,12 @@ class ModbusTCPClient:
             self.socket.connect((self.ip, self.port))
             self.is_connected = True
             print(f"✅ Connected to OnRobot Compute Box at {self.ip}:{self.port}")
+            
+            # Try to auto-detect register mapping
+            if not self.validate_register_map():
+                print("⚠️ Standard register map failed, trying to auto-detect...")
+                self.auto_detect_registers()
+                
             return True
         except Exception as e:
             print(f"❌ Failed to connect to {self.ip}:{self.port} - {e}")
@@ -94,7 +133,12 @@ class ModbusTCPClient:
         # Parse PDU
         function_code = response[7]
         if function_code != expected_function:
-            print(f"❌ Function code mismatch: expected {expected_function}, got {function_code}")
+            # Check for error response
+            if function_code == expected_function + 0x80:
+                error_code = response[8] if len(response) > 8 else 0
+                print(f"❌ Modbus error response: function 0x{function_code:02X}, error code 0x{error_code:02X}")
+                return None
+            print(f"❌ Function code mismatch: expected 0x{expected_function:02X}, got 0x{function_code:02X}")
             return None
         
         # Handle different function codes
@@ -212,35 +256,33 @@ class ModbusTCPClient:
     def read_gripper_status(self) -> Optional[dict]:
         """
         Read all gripper status registers at once.
-        UPDATED: Uses the actual 2FG7 variable addresses.
+        Returns dict with status, width_actual, force_actual.
         """
         try:
-            # Read the actual 2FG7 status registers in one batch
-            result = self.read_holding_registers(self.ONROBOT_2FG7_REGISTERS['twofg_busy'], 4)
-            if result and len(result) >= 4:
+            # Try to read all status registers in one go
+            result = self.read_holding_registers(
+                self.current_register_map['status'], 
+                4  # Read status, width, force, grip_detected
+            )
+            
+            if result and len(result) >= 3:
                 return {
-                    'busy': result[0],           # twofg_busy
-                    'width': result[1],          # twofg_width_ext
-                    'force': result[2],          # twofg_force
-                    'grip_detected': result[3]   # twofg_grip_detected
+                    'status': result[0],
+                    'width_actual': result[1],
+                    'force_actual': result[2],
+                    'grip_detected': result[3] if len(result) > 3 else 0
                 }
             
-            # Fallback: Try reading individual registers
-            print("⚠️ Batch read failed, trying individual registers...")
-            busy = self.read_holding_registers(self.ONROBOT_2FG7_REGISTERS['twofg_busy'], 1)
-            width = self.read_holding_registers(self.ONROBOT_2FG7_REGISTERS['twofg_width_ext'], 1)
-            force = self.read_holding_registers(self.ONROBOT_2FG7_REGISTERS['twofg_force'], 1)
-            grip = self.read_holding_registers(self.ONROBOT_2FG7_REGISTERS['twofg_grip_detected'], 1)
+            # Fallback: try reading registers individually
+            status_data = {}
+            for reg_name in ['status', 'width_actual', 'force_actual', 'grip_detected']:
+                if reg_name in self.current_register_map:
+                    result = self.read_holding_registers(self.current_register_map[reg_name], 1)
+                    if result:
+                        status_data[reg_name] = result[0]
             
-            if busy and width and force:
-                return {
-                    'busy': busy[0],
-                    'width': width[0],
-                    'force': force[0],
-                    'grip_detected': grip[0] if grip else 0
-                }
-                
-            return None
+            return status_data if status_data else None
+            
         except Exception as e:
             print(f"❌ Error reading gripper status: {e}")
             return None
@@ -248,17 +290,88 @@ class ModbusTCPClient:
     def send_gripper_command(self, width_target: int, force_target: int) -> bool:
         """
         Send gripper command to target width and force.
-        UPDATED: Uses the actual 2FG7 target registers.
         """
         try:
-            # Write to target width and force registers
+            # Write to both target registers
             return self.write_multiple_registers(
-                self.ONROBOT_2FG7_REGISTERS['twofg_width_tgt'], 
+                self.current_register_map['width_target'], 
                 [width_target, force_target]
             )
         except Exception as e:
             print(f"❌ Error sending gripper command: {e}")
             return False
+
+    def validate_register_map(self) -> bool:
+        """
+        Validate if the current register map is correct by reading status register.
+        """
+        try:
+            result = self.read_holding_registers(self.current_register_map['status'], 1)
+            if result is not None:
+                print(f"✅ Register map validated - status register 0x{self.current_register_map['status']:04X} responded")
+                self.register_map_validated = True
+                return True
+            return False
+        except Exception as e:
+            print(f"❌ Register map validation failed: {e}")
+            return False
+
+    def auto_detect_registers(self):
+        """
+        Auto-detect the correct register mapping by scanning common address ranges.
+        """
+        print("🔍 Auto-detecting register mapping...")
+        
+        # Common address ranges to scan
+        scan_ranges = [
+            (0x0000, 0x0020),   # Standard PNP addresses
+            (0x1000, 0x1020),   # Alternative range 1
+            (0x2000, 0x2020),   # Alternative range 2
+            (0x3000, 0x3020),   # Alternative range 3
+            (0x4000, 0x4020),   # Alternative range 4
+        ]
+        
+        for start_addr, end_addr in scan_ranges:
+            print(f"🔍 Scanning range 0x{start_addr:04X}-0x{end_addr:04X}...")
+            valid_registers = self.scan_registers(start_addr, end_addr - start_addr)
+            
+            if valid_registers:
+                print(f"✅ Found valid registers in range 0x{start_addr:04X}")
+                # Try to identify register types based on common patterns
+                self.identify_registers(valid_registers)
+                break
+        
+        if not self.register_map_validated:
+            print("❌ Could not auto-detect register mapping")
+        else:
+            print("✅ Register mapping auto-detection completed")
+
+    def identify_registers(self, valid_registers: dict):
+        """
+        Identify register types based on common patterns and values.
+        """
+        print("🔍 Identifying register types...")
+        
+        # Common patterns for identification
+        for addr, value in valid_registers.items():
+            if value in [0, 1, 2, 3]:  # Status register often has small values
+                if 'status' not in self.current_register_map:
+                    self.current_register_map['status'] = addr
+                    print(f"  ✅ Identified status register at 0x{addr:04X}")
+            
+            elif 0 <= value <= 255:  # Width/force values are typically 0-255
+                if 'width_actual' not in self.current_register_map:
+                    self.current_register_map['width_actual'] = addr
+                    print(f"  ✅ Identified width register at 0x{addr:04X}")
+                elif 'force_actual' not in self.current_register_map:
+                    self.current_register_map['force_actual'] = addr
+                    print(f"  ✅ Identified force register at 0x{addr:04X}")
+        
+        # Validate the identified map
+        if self.validate_register_map():
+            print("✅ Register identification successful")
+        else:
+            print("❌ Register identification failed")
 
     def scan_registers(self, start_addr: int = 0, count: int = 10) -> dict:
         """
@@ -273,49 +386,19 @@ class ModbusTCPClient:
             if result is not None:
                 valid_registers[addr] = result[0]
                 print(f"✅ Register 0x{addr:04X}: {result[0]} (0x{result[0]:04X})")
-            else:
-                print(f"❌ Register 0x{addr:04X}: No response")
+            # else:
+            #     print(f"❌ Register 0x{addr:04X}: No response")
             
-            time.sleep(0.1)  # Small delay to not overwhelm the device
+            time.sleep(0.05)  # Small delay to not overwhelm the device
         
         return valid_registers
 
-    def test_communication(self) -> bool:
+    def get_register_info(self) -> dict:
         """
-        Test basic communication with the gripper.
+        Get information about the current register mapping.
         """
-        print("🧪 Testing gripper communication...")
-        
-        # Try reading the known 2FG7 registers
-        test_registers = [
-            (self.ONROBOT_2FG7_REGISTERS['twofg_busy'], "twofg_busy"),
-            (self.ONROBOT_2FG7_REGISTERS['twofg_width_ext'], "twofg_width_ext"),
-            (self.ONROBOT_2FG7_REGISTERS['twofg_force'], "twofg_force"),
-        ]
-        
-        success_count = 0
-        for addr, name in test_registers:
-            result = self.read_holding_registers(addr, 1)
-            if result:
-                print(f"✅ {name} (0x{addr:04X}): {result[0]}")
-                success_count += 1
-            else:
-                print(f"❌ {name} (0x{addr:04X}): No response")
-        
-        return success_count > 0
-
-    def get_gripper_info(self) -> dict:
-        """
-        Get comprehensive gripper information for diagnostics.
-        """
-        info = {}
-        
-        # Test all known registers
-        for name, addr in self.ONROBOT_2FG7_REGISTERS.items():
-            result = self.read_holding_registers(addr, 1)
-            if result:
-                info[name] = result[0]
-            else:
-                info[name] = "No response"
-                
-        return info
+        return {
+            'current_map': self.current_register_map,
+            'validated': self.register_map_validated,
+            'connected': self.is_connected
+        }

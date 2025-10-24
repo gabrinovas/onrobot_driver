@@ -33,7 +33,7 @@ class GripperController:
         goal_msg.command.position = float(position)
         goal_msg.command.max_effort = float(force)
         
-        self.node.get_logger().info(f"Moving gripper to: {position}m, force: {force}%")
+        self.node.get_logger().info(f"Moving gripper to: {position}m, force: {force}N")
         
         # Send goal
         future = self.action_client.send_goal_async(goal_msg)
@@ -50,7 +50,7 @@ class GripperController:
         
         # Wait for result
         result_future = goal_handle.get_result_async()
-        rclpy.spin_until_future_complete(self.node, result_future, timeout_sec=10.0)
+        rclpy.spin_until_future_complete(self.node, result_future, timeout_sec=15.0)
         
         if result_future.result() is None:
             self.node.get_logger().warn("No result received (timeout)")
@@ -68,12 +68,18 @@ class GripperController:
 
 def main():
     if len(sys.argv) < 2:
-        print("Usage: python3 control_gripper.py <position_in_meters> [force_percentage]")
-        print("Example: python3 control_gripper.py 0.04 60.0")
+        print("Usage: python3 control_gripper.py <position_in_meters> [force_newtons]")
+        print("Example: python3 control_gripper.py 0.055 50.0")
+        print("Position range: 0.035 (closed) to 0.075 (open) meters")
         sys.exit(1)
     
     position = float(sys.argv[1])
     force = float(sys.argv[2]) if len(sys.argv) > 2 else 50.0
+    
+    # Validate position
+    if position < 0.035 or position > 0.075:
+        print(f"❌ Invalid position {position}m. Must be between 0.035m and 0.075m")
+        sys.exit(1)
     
     controller = GripperController()
     

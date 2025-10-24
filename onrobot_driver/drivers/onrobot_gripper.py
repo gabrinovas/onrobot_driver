@@ -60,12 +60,12 @@ class OnRobotGripper:
         self.is_ready = True
         self.is_moving = False
         self.is_connected = False
-        self.grip_detected = False
         self.last_update_time = self.node.get_clock().now()
         self.lock = Lock()
         
         # Hardware communication (only initialized if needed)
         self.client = None
+        self.register_info = {}
         if not self.simulation_mode:
             try:
                 self.client = ModbusTCPClient(self.ip_address, self.port, timeout=2.0)
@@ -87,7 +87,7 @@ class OnRobotGripper:
         self.logger.info(f"Joint name: {self.joint_name}")
     
     def setup_communication(self):
-        """Setup communication - with better error handling"""
+        """Setup communication - only connect to hardware if not in simulation"""
         if self.simulation_mode:
             self.logger.info("Running in simulation mode - no hardware connection")
             self.is_connected = True
@@ -98,29 +98,29 @@ class OnRobotGripper:
                 self.is_connected = True
                 self.logger.info("✅ Successfully connected to OnRobot Compute Box")
                 
-                # Test communication with better diagnostics
-                if self.client.test_communication():
+                # Get register information for debugging
+                self.register_info = self.client.get_register_info()
+                self.logger.info(f"Register info: {self.register_info}")
+                
+                # Test communication by reading status
+                if self.read_gripper_status():
                     self.logger.info("✅ Gripper communication test successful")
-                    
-                    # Try to read initial status
-                    if self.read_gripper_status():
-                        self.logger.info("✅ Initial gripper status read successful")
-                    else:
-                        self.logger.warning("⚠️ Initial status read failed, but continuing")
                 else:
-                    self.logger.error("❌ Gripper communication test failed")
-                    self.logger.info("Switching to simulation mode")
-                    self.simulation_mode = True
-                    self.is_connected = True
+                    self.logger.warning("⚠️ Gripper status read failed, but continuing")
+                    
+                    # Try to force register detection
+                    self.logger.info("Attempting forced register detection...")
+                    self.client.auto_detect_registers()
+                    
             else:
                 self.logger.error(f"Failed to connect to {self.ip_address}:{self.port}")
-                self.logger.info("Switching to simulation mode")
+                self.logger.error("Switching to simulation mode")
                 self.simulation_mode = True
                 self.is_connected = True
                     
         except Exception as e:
             self.logger.error(f"Hardware connection failed: {e}")
-            self.logger.info("Switching to simulation mode")
+            self.logger.error("Switching to simulation mode")
             self.simulation_mode = True
             self.is_connected = True
     
@@ -132,7 +132,14 @@ class OnRobotGripper:
         self.position_pub = self.node.create_publisher(Float32, 'gripper_position', 10)
         self.connection_pub = self.node.create_publisher(Bool, 'gripper_connected', 10)
         self.mode_pub = self.node.create_publisher(String, 'gripper_mode', 10)
-        self.grip_detected_pub = self.node.create_publisher(Bool, 'gripper_grip_detected', 10)
+        
+        # Service for debugging register info
+        from std_srvs.srv import Trigger
+        self.debug_service = self.node.create_service(
+            Trigger, 
+            'gripper_debug_info', 
+            self.debug_info_callback
+        )
         
         # Action server for gripper commands
         self.action_server = ActionServer(
@@ -151,6 +158,21 @@ class OnRobotGripper:
         self.status_timer = self.node.create_timer(0.5, self.publish_status)
         
         self.logger.info("ROS2 interfaces initialized")
+
+    def debug_info_callback(self, request, response):
+        """Service callback for debugging information"""
+        response.success = True
+        response.message = f"""
+Gripper Debug Information:
+- Connected: {self.is_connected}
+- Simulation: {self.simulation_mode}
+- Register Info: {self.register_info}
+- Current Position: {self.current_position:.3f}m
+- Current Force: {self.current_force:.1f}N
+- Ready: {self.is_ready}
+- Moving: {self.is_moving}
+"""
+        return response
 
     def goal_callback(self, goal_request):
         """Called when a new action goal is received"""
@@ -308,7 +330,6 @@ class OnRobotGripper:
     def read_gripper_status(self) -> bool:
         """
         Read current gripper status from hardware or simulation.
-        UPDATED: Uses the actual 2FG7 variables provided.
         """
         if self.simulation_mode or not self.client or not self.client.is_connected:
             # For simulation, just return current state
@@ -316,33 +337,11 @@ class OnRobotGripper:
             return True
         
         try:
-            # Read the actual 2FG7 variables
+            # Use the new status reading method
             status_data = self.client.read_gripper_status()
             
             if status_data:
-                self.logger.debug(f"Raw status data: {status_data}")
                 return self.parse_status_data(status_data)
-            
-            # If no status data, try reading individual variables
-            self.logger.warning("No status data received, trying individual variable reads...")
-            
-            try:
-                # Read individual 2FG7 variables
-                busy = self.client.read_holding_registers(0x07D0, 1)  # twofg_Busy
-                width = self.client.read_holding_registers(0x07D1, 1)  # twofg_Width_ext
-                force = self.client.read_holding_registers(0x07D2, 1)  # twofg_Force
-                grip_detected = self.client.read_holding_registers(0x07D3, 1)  # twofg_Grip_detected
-                
-                if busy and width and force:
-                    status_data = {
-                        'busy': busy[0],
-                        'width': width[0],
-                        'force': force[0],
-                        'grip_detected': grip_detected[0] if grip_detected else 0
-                    }
-                    return self.parse_status_data(status_data)
-            except Exception as e:
-                self.logger.warning(f"Individual variable read failed: {e}")
             
             self.logger.warning("No status data received from gripper")
             return False
@@ -350,30 +349,25 @@ class OnRobotGripper:
         except Exception as e:
             self.logger.error(f"Error reading gripper status: {e}")
             return False
-
+    
     def parse_status_data(self, status_data: dict) -> bool:
         """
-        Parse status data from 2FG7 gripper variables.
-        UPDATED: Uses the actual variable names provided.
+        Parse status data from gripper registers.
+        Updates internal state variables.
         """
         try:
-            # Extract the actual 2FG7 variables
-            busy = status_data.get('busy', 0)
-            width_raw = status_data.get('width', 0)  # twofg_Width_ext
-            force_raw = status_data.get('force', 0)  # twofg_Force
-            grip_detected = status_data.get('grip_detected', 0)  # twofg_Grip_detected
+            # Extract values with defaults
+            status = status_data.get('status', 0)
+            position_raw = status_data.get('width_actual', 128)  # Default to middle
+            force_raw = status_data.get('force_actual', 0)
             
-            # Parse status based on twofg_Busy
-            # Busy values: 0=ready, 1=busy/moving, 2=error?
-            self.is_ready = (busy == 0)  # Ready when not busy
-            self.is_moving = (busy == 1)  # Moving when busy
-            
-            # Parse grip detection
-            self.grip_detected = (grip_detected == 1)  # 1=grip detected, 0=no grip
+            # Parse status bits (adjust based on actual protocol)
+            # Common status bits for OnRobot grippers
+            self.is_ready = (status & 0x01) != 0  # Ready flag
+            self.is_moving = (status & 0x02) != 0  # Moving flag
             
             # Convert raw values to physical units
-            # twofg_Width_ext: 0-255 corresponds to 0-70mm
-            self.current_position = self.units_to_meters(width_raw)
+            self.current_position = self.units_to_meters(position_raw)
             self.current_force = self.units_to_force(force_raw)
             
             # Check if we've reached target position (with tolerance)
@@ -382,8 +376,7 @@ class OnRobotGripper:
                 if abs(self.current_position - self.target_position) < tolerance:
                     self.is_moving = False
             
-            self.logger.debug(f"Status: busy={busy}, ready={self.is_ready}, moving={self.is_moving}, "
-                            f"grip_detected={self.grip_detected}, "
+            self.logger.debug(f"Status: ready={self.is_ready}, moving={self.is_moving}, "
                             f"position={self.current_position:.3f}m, force={self.current_force:.1f}N")
             
             return True
@@ -440,6 +433,7 @@ class OnRobotGripper:
     def publish_status(self):
         """
         Publish current gripper status to ROS2 topics.
+        FIXED: URDF already handles mirroring, so publish same position for both
         """
         try:
             joint_state = JointState()
@@ -470,11 +464,6 @@ class OnRobotGripper:
             mode_msg = String()
             mode_msg.data = 'simulation' if self.simulation_mode else 'hardware'
             self.mode_pub.publish(mode_msg)
-            
-            # Publish grip detection
-            grip_msg = Bool()
-            grip_msg.data = self.grip_detected
-            self.grip_detected_pub.publish(grip_msg)
             
         except Exception as e:
             self.logger.error(f"Error publishing status: {e}")
@@ -578,10 +567,10 @@ class OnRobotGripper:
             'is_ready': self.is_ready,
             'is_moving': self.is_moving,
             'is_connected': self.is_connected,
-            'grip_detected': self.grip_detected,
             'simulation_mode': self.simulation_mode,
             'gripper_type': self.gripper_type,
             'min_width': self.min_width,
             'max_width': self.max_width,
-            'max_force': self.max_force
+            'max_force': self.max_force,
+            'register_info': self.register_info
         }

@@ -15,6 +15,13 @@ def generate_launch_description():
             description='Path to config file'
         ),
         
+        # Declare debug mode argument
+        DeclareLaunchArgument(
+            'debug',
+            default_value='false',
+            description='Enable debug mode for register detection'
+        ),
+        
         # Launch the onrobot_driver_node with the specified parameters file
         Node(
             package='onrobot_driver',
@@ -26,7 +33,10 @@ def generate_launch_description():
                     FindPackageShare('onrobot_driver'),
                     'config',
                     LaunchConfiguration('config_file')
-                ])
+                ]),
+                {
+                    'debug_mode': LaunchConfiguration('debug')
+                }
             ]
         ),
     ])
