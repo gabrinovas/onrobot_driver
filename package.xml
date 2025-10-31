@@ -16,6 +16,10 @@
   <depend>geometry_msgs</depend>
   <depend>trajectory_msgs</depend>
   
+  <!-- Add MoveIt dependencies for the bridge -->
+  <depend>moveit_msgs</depend>
+  <depend>shape_msgs</depend>
+  
   <!-- ROS2 Control dependencies -->
   <depend>controller_manager</depend>
   
