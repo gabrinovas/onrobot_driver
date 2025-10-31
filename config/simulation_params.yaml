@@ -4,7 +4,7 @@
 
 /**:
   ros__parameters:
-    # Gripper model type (e.g., "2FG7", "2FG14", etc.)
+    # Gripper model type
     gripper_type: "2FG7"
 
     # IP address for simulation (localhost)
@@ -25,8 +25,14 @@
     # Maximum gripping force in Newtons
     max_force: 100.0
 
+    # Default speed percentage
+    default_speed: 50
+
+    # Default grip mode
+    default_grip_mode: "external"
+
     # Driver update rate in Hz (lower for simulation)
-    update_rate: 10.0
+    update_rate: 30.0
 
     # Enable simulation mode (true = no hardware required)
     simulation_mode: true
@@ -36,3 +42,33 @@
 
     # Command timeout in seconds
     command_timeout: 10.0
+
+    # Gripper connection timeout in seconds
+    connection_timeout: 2.0
+
+    # Retry attempts for failed commands
+    max_retry_attempts: 3
+
+    # Safety parameters
+    emergency_stop_timeout: 2.0
+    force_limit_threshold: 90.0
+
+    # Debug settings
+    enable_debug_logging: true
+    publish_diagnostics: true
+
+    # Simulation-specific parameters
+    simulation:
+      movement_speed: 0.05  # m/s
+      force_decay_rate: 0.8  # Force reduces to 20% at end of movement
+      update_interval: 0.033  # ~30Hz
+
+    # URDF-specific parameters for asymmetric gripper
+    urdf_config:
+      left_finger_initial_x: 0.032239    # Initial X position from URDF
+      right_finger_initial_x: -0.054361   # Initial X position from URDF
+      finger_y_position: 0.029494         # Y position from URDF
+      finger_z_position: -0.12005         # Z position from URDF
+      finger_thickness: 0.005             # Estimated finger thickness for collision
+      finger_length: 0.03                 # Estimated finger length for collision
+      finger_height: 0.01                 # Estimated finger height for collision

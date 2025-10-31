@@ -17,6 +17,7 @@ from .modbus_client import ModbusTCPClient
 class OnRobotGripper:
     """
     Unified OnRobot gripper controller for 2FG7/2FG14 grippers.
+    CORRECTED for asymmetric URDF configuration.
     Based on actual Modbus register mapping from documentation.
     """
     
@@ -438,34 +439,62 @@ class OnRobotGripper:
     def publish_status(self):
         """
         Publish current gripper status to ROS2 topics.
-        FIXED: URDF already handles mirroring, so publish same position for both
+        CORRECTED for asymmetric URDF configuration.
         """
         try:
+            # Your URDF has asymmetric finger positions:
+            # Left finger: moves from 0.032239 to 0.014739 (0.0 to 0.0175 in joint space)
+            # Right finger: moves from -0.054361 to -0.036861 (-0.0175 to 0.0 in joint space)
+            
+            # Convert driver position (0.035-0.070m total opening) to joint positions
+            total_opening = self.current_position  # This is 0.035 to 0.070 from driver
+            
+            # Calculate finger displacement from closed position
+            # Closed: 0.035m opening, each finger at 0.0 in joint space
+            # Open: 0.070m opening, each finger at 0.0175 in joint space
+            finger_displacement = (total_opening - 0.035) / 2.0
+            
+            # Left finger: starts at 0.032239, moves negative X direction
+            left_finger_position = 0.032239 - finger_displacement
+            
+            # Right finger: starts at -0.054361, moves positive X direction  
+            right_finger_position = -0.054361 + finger_displacement
+            
             joint_state = JointState()
             joint_state.header.stamp = self.node.get_clock().now().to_msg()
             joint_state.name = ['left_finger_joint', 'right_finger_joint']
-            # URDF already positions fingers symmetrically, so use same position
-            joint_state.position = [self.current_position, self.current_position]
+            
+            # Joint space positions (what the controller expects)
+            # Left: 0.0 (closed) to 0.0175 (open)
+            # Right: -0.0175 (closed) to 0.0 (open)
+            joint_space_left = finger_displacement
+            joint_space_right = -finger_displacement
+            
+            joint_state.position = [joint_space_left, joint_space_right]
             joint_state.velocity = [0.0, 0.0]
             joint_state.effort = [self.current_force, self.current_force]
             self.joint_state_pub.publish(joint_state)
             
-            # Publish status
+            # Publish additional debug info
+            self.logger.debug(f"Gripper: total={total_opening:.4f}m, "
+                             f"left_joint={joint_space_left:.4f}m, "
+                             f"right_joint={joint_space_right:.4f}m, "
+                             f"left_world={left_finger_position:.4f}m, "
+                             f"right_world={right_finger_position:.4f}m")
+            
+            # Publish status topics
             status_msg = Bool()
             status_msg.data = self.is_ready
             self.status_pub.publish(status_msg)
             
-            # Publish position
             position_msg = Float32()
             position_msg.data = self.current_position
             self.position_pub.publish(position_msg)
             
-            # Publish connection status
             connection_msg = Bool()
             connection_msg.data = self.is_connected
             self.connection_pub.publish(connection_msg)
             
-            # Publish mode
             mode_msg = String()
             mode_msg.data = 'simulation' if self.simulation_mode else 'hardware'
             self.mode_pub.publish(mode_msg)
@@ -554,10 +583,17 @@ class OnRobotGripper:
         Get current gripper status as dictionary.
         Useful for monitoring and diagnostics.
         """
+        # Calculate joint positions for status display
+        finger_displacement = (self.current_position - 0.035) / 2.0
+        joint_space_left = finger_displacement
+        joint_space_right = -finger_displacement
+        
         return {
             'position': self.current_position,
             'target_position': self.target_position,
             'force': self.current_force,
+            'left_joint_position': joint_space_left,
+            'right_joint_position': joint_space_right,
             'is_ready': self.is_ready,
             'is_moving': self.is_moving,
             'is_connected': self.is_connected,

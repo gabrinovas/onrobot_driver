@@ -1,10 +1,10 @@
-# OnRobot Gripper ROS2 Parameters
-# This YAML file configures the OnRobot gripper driver node.
+# OnRobot Gripper ROS2 Parameters - HARDWARE MODE
+# This YAML file configures the OnRobot gripper driver node for real hardware.
 # Adjust these parameters to match your hardware setup and requirements.
 
 /**:
   ros__parameters:
-    # Gripper model type (e.g., "2FG7", "2FG14", etc.)
+    # Gripper model type
     gripper_type: "2FG7"
 
     # IP address of the OnRobot Compute Box (default from documentation)
@@ -37,8 +37,31 @@
     # Enable simulation mode (true = no hardware required, for testing)
     simulation_mode: false
 
-    # Joint name for the gripper
+    # Joint name for the gripper (master joint for control)
     joint_name: "left_finger_joint"
 
     # Command timeout in seconds
     command_timeout: 10.0
+
+    # Gripper connection timeout in seconds
+    connection_timeout: 5.0
+
+    # Retry attempts for failed commands
+    max_retry_attempts: 3
+
+    # Safety parameters
+    emergency_stop_timeout: 2.0
+    force_limit_threshold: 90.0
+
+    # Debug settings
+    enable_debug_logging: false
+    publish_diagnostics: true
+
+    # URDF-specific parameters for asymmetric gripper
+    urdf_config:
+      left_finger_initial_x: 0.032239    # Initial X position from URDF
+      right_finger_initial_x: -0.054361   # Initial X position from URDF
+      finger_y_position: 0.029494         # Y position from URDF
+      finger_z_position: -0.12005         # Z position from URDF
+      finger_thickness: 0.005             # Estimated finger thickness for collision
+      finger_length: 0.03                 # Estimated finger length for collision
