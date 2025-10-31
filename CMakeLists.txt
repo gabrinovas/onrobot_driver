@@ -20,11 +20,22 @@ find_package(trajectory_msgs REQUIRED)
 # Install Python package
 ament_python_install_package(${PROJECT_NAME})
 
-# Install Python scripts as executables
+# Install Python scripts as executables - FIXED: Separate install commands for each script
 install(PROGRAMS
   scripts/control_gripper.py
-  scripts/diagnostic_tool.py
   RENAME control_gripper
+  DESTINATION lib/${PROJECT_NAME}
+)
+
+install(PROGRAMS
+  scripts/diagnostic_tool.py
+  RENAME gripper_diagnostic
+  DESTINATION lib/${PROJECT_NAME}
+)
+
+install(PROGRAMS
+  scripts/moveit_gripper_bridge.py
+  RENAME moveit_gripper_bridge
   DESTINATION lib/${PROJECT_NAME}
 )
 
