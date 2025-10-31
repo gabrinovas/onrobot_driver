@@ -5,8 +5,6 @@ from rclpy.node import Node
 from control_msgs.action import GripperCommand
 from rclpy.action import ActionClient
 import time
-import subprocess
-import os
 
 class GripperTester(Node):
     def __init__(self):
@@ -127,33 +125,6 @@ class GripperTester(Node):
                               f'reached_goal={result.reached_goal}, stalled={result.stalled}')
         
         return result.reached_goal
-    
-    def test_gripper_monitoring(self):
-        """Test that gripper topics are being published"""
-        self.get_logger().info('=== Testing Gripper Topics ===')
-        
-        # Check if topics exist
-        from rclpy.topic_or_service_is_hidden import topic_or_service_is_hidden
-        
-        topics_to_check = [
-            '/gripper_position',
-            '/gripper_status', 
-            '/joint_states'
-        ]
-        
-        all_topics_found = True
-        for topic in topics_to_check:
-            # Simple topic existence check
-            try:
-                # This is a basic check - in production you'd use proper topic discovery
-                self.get_logger().info(f'Checking topic: {topic}')
-                # For now, just log that we'd check this
-                self.get_logger().info(f'✅ Topic {topic} would be checked')
-            except Exception as e:
-                self.get_logger().warn(f'⚠️ Could not check topic {topic}: {e}')
-                all_topics_found = False
-        
-        return all_topics_found
 
 def main():
     rclpy.init()
@@ -161,17 +132,13 @@ def main():
     tester = GripperTester()
     
     try:
-        # Test 1: Basic functionality
+        # Test basic functionality
         basic_success = tester.test_gripper_basic()
-        
-        # Test 2: Topic monitoring (informational)
-        topic_success = tester.test_gripper_monitoring()
         
         # Final results
         tester.get_logger().info('')
         tester.get_logger().info('=== TEST SUMMARY ===')
         tester.get_logger().info(f'Basic functionality: {"✅ PASS" if basic_success else "❌ FAIL"}')
-        tester.get_logger().info(f'Topic monitoring: {"✅ PASS" if topic_success else "⚠️  PARTIAL"}')
         
         if basic_success:
             tester.get_logger().info('🎉 OnRobot Gripper tests completed successfully!')
