@@ -25,6 +25,12 @@
     # Maximum gripping force in Newtons
     max_force: 100.0
 
+    # Default speed percentage (10-100%)
+    default_speed: 50
+
+    # Default grip mode ("external" or "internal")
+    default_grip_mode: "external"
+
     # Driver update rate in Hz (how often to poll and command the gripper)
     update_rate: 100.0
 
