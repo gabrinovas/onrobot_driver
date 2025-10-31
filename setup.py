@@ -34,6 +34,7 @@ setup(
         'console_scripts': [
             'onrobot_driver_node = onrobot_driver.nodes.onrobot_driver_node:main',
             'control_gripper = onrobot_driver.scripts.control_gripper:main',
+            'gripper_diagnostic = onrobot_driver.scripts.diagnostic_tool:main',
         ],
     },
 )

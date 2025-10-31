@@ -13,12 +13,15 @@ def generate_launch_description():
             parameters=[{                          # Inline parameters for the node
                 'gripper_type': '2FG7',            # Gripper model type
                 'ip_address': '127.0.0.1',         # Localhost for simulation
-                'port': 502,                       # TCP port (default Modbus)
+                'port': 1502,                      # TCP port (non-standard for simulation)
+                'device_address': 65,              # Device address for Quick Changer
                 'max_width': 0.070,                # Max opening width in meters
                 'min_width': 0.035,                # Min opening width in meters
                 'max_force': 100.0,                # Max gripping force in Newtons
                 'update_rate': 10.0,               # Update rate in Hz
                 'simulation_mode': True,           # Enable simulation mode
+                'joint_name': 'left_finger_joint', # Joint name
+                'command_timeout': 10.0,           # Command timeout
             }]
         ),
     ])

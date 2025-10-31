@@ -2,9 +2,9 @@
 # This YAML file configures the OnRobot gripper driver node for simulation.
 # Adjust these parameters for your simulation environment.
 
- /**:
+/**:
   ros__parameters:
-    # Gripper model type (e.g., "2FG7", "3FG15", "VGC10", etc.)
+    # Gripper model type (e.g., "2FG7", "2FG14", etc.)
     gripper_type: "2FG7"
 
     # IP address for simulation (localhost)
@@ -12,6 +12,9 @@
 
     # TCP port for simulation (use a non-standard port to avoid conflicts)
     port: 1502
+
+    # Device address for simulation
+    device_address: 65
 
     # Maximum opening width of the gripper in meters (e.g., 0.070 = 70mm)
     max_width: 0.070    # 70mm max opening
@@ -27,3 +30,9 @@
 
     # Enable simulation mode (true = no hardware required)
     simulation_mode: true
+
+    # Joint name for the gripper
+    joint_name: "left_finger_joint"
+
+    # Command timeout in seconds
+    command_timeout: 10.0

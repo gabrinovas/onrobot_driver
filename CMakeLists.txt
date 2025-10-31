@@ -23,6 +23,7 @@ ament_python_install_package(${PROJECT_NAME})
 # Install Python scripts as executables
 install(PROGRAMS
   scripts/control_gripper.py
+  scripts/diagnostic_tool.py
   RENAME control_gripper
   DESTINATION lib/${PROJECT_NAME}
 )
@@ -31,6 +32,12 @@ install(PROGRAMS
 install(PROGRAMS
   onrobot_driver/nodes/onrobot_driver_node.py
   RENAME onrobot_driver_node
+  DESTINATION lib/${PROJECT_NAME}
+)
+
+# Install test mock server
+install(PROGRAMS
+  test/mock_gripper_server.py
   DESTINATION lib/${PROJECT_NAME}
 )
 

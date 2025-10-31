@@ -16,9 +16,30 @@ from .modbus_client import ModbusTCPClient
 
 class OnRobotGripper:
     """
-    Unified OnRobot gripper controller for both simulation and hardware.
-    Properly integrated with ROS2 lifecycle and control patterns.
+    Unified OnRobot gripper controller for 2FG7/2FG14 grippers.
+    Based on actual Modbus register mapping from documentation.
     """
+    
+    # Register addresses from documentation
+    REG_TARGET_WIDTH = 0x0000    # Target width in 1/10 mm
+    REG_TARGET_FORCE = 0x0001    # Target force in N
+    REG_TARGET_SPEED = 0x0002    # Target speed in % (10-100%)
+    REG_COMMAND = 0x0003         # Command register
+    REG_STATUS = 0x0100          # Status register
+    REG_EXTERNAL_WIDTH = 0x0101  # External width in 1/10 mm signed
+    REG_INTERNAL_WIDTH = 0x0102  # Internal width in 1/10 mm signed
+    REG_FORCE = 0x0107           # Current force in N
+    
+    # Command codes from documentation
+    CMD_GRIP_EXTERNAL = 1
+    CMD_GRIP_INTERNAL = 2
+    CMD_STOP = 3
+    
+    # Status bit masks from documentation
+    STATUS_BUSY = 0x0001
+    STATUS_GRIP_DETECTED = 0x0002
+    STATUS_ERROR_NOT_CALIBRATED = 0x0008
+    STATUS_ERROR_LINEAR_SENSOR = 0x0010
     
     def __init__(self, node: Node):
         self.node = node
@@ -35,6 +56,7 @@ class OnRobotGripper:
         self.node.declare_parameter('simulation_mode', False)
         self.node.declare_parameter('joint_name', 'left_finger_joint')
         self.node.declare_parameter('command_timeout', 10.0)
+        self.node.declare_parameter('device_address', 65)  # Default for Quick Changer
         
         # Get parameters from ROS2 node
         self.gripper_type = self.node.get_parameter('gripper_type').value
@@ -47,6 +69,7 @@ class OnRobotGripper:
         self.simulation_mode = self.node.get_parameter('simulation_mode').value
         self.joint_name = self.node.get_parameter('joint_name').value
         self.command_timeout = self.node.get_parameter('command_timeout').value
+        self.device_address = self.node.get_parameter('device_address').value
         
         # Auto-detect simulation mode if not explicitly set
         if not self.simulation_mode and self.ip_address in ["127.0.0.1", "localhost"]:
@@ -60,14 +83,15 @@ class OnRobotGripper:
         self.is_ready = True
         self.is_moving = False
         self.is_connected = False
-        self.last_update_time = self.node.get_clock().now()
+        self.last_command_time = self.node.get_clock().now()
         self.lock = Lock()
         
         # Hardware communication (only initialized if needed)
         self.client = None
         if not self.simulation_mode:
             try:
-                self.client = ModbusTCPClient(self.ip_address, self.port, timeout=2.0)
+                self.client = ModbusTCPClient(self.ip_address, self.port, 
+                                            unit_id=self.device_address, timeout=2.0)
             except Exception as e:
                 self.logger.error(f"Failed to initialize Modbus client: {e}")
                 self.simulation_mode = True
@@ -81,7 +105,7 @@ class OnRobotGripper:
         
         self.logger.info(f"OnRobot {self.gripper_type} gripper initialized")
         self.logger.info(f"Mode: {'SIMULATION' if self.simulation_mode else 'HARDWARE'}")
-        self.logger.info(f"IP: {self.ip_address}, Port: {self.port}")
+        self.logger.info(f"IP: {self.ip_address}, Port: {self.port}, Device: {self.device_address}")
         self.logger.info(f"Width range: {self.min_width:.3f}m to {self.max_width:.3f}m")
         self.logger.info(f"Joint name: {self.joint_name}")
     
@@ -150,8 +174,7 @@ class OnRobotGripper:
         """Called when an action goal is cancelled"""
         self.logger.info("Gripper action cancelled")
         # Stop any ongoing movement
-        with self.lock:
-            self.is_moving = False
+        self.stop()
         return rclpy.action.CancelResponse.ACCEPT
 
     def execute_action_callback(self, goal_handle: ServerGoalHandle):
@@ -244,7 +267,7 @@ class OnRobotGripper:
     
     def move_to_position(self, position: float, force: float = 50.0) -> bool:
         """
-        Move gripper to specified position.
+        Move gripper to specified position using external grip command.
         Handles both simulation and hardware modes.
         """
         with self.lock:
@@ -255,13 +278,15 @@ class OnRobotGripper:
             self.logger.info(f"Moving gripper to: {position:.3f}m, force: {force:.1f}N")
             
             if not self.simulation_mode and self.client and self.client.is_connected:
-                # Hardware mode: send command to hardware
-                pos_units = self.meters_to_units(position)
-                force_units = self.force_to_units(force)
-                success = self.send_gripper_command(pos_units, force_units)
+                # Hardware mode: send command to hardware using proper protocol
+                width_units = self.meters_to_units(position)
+                force_units = int(force)  # Force is in N directly
+                
+                success = self.send_gripper_command(width_units, force_units)
                 if success:
                     self.target_position = position
                     self.is_moving = True
+                    self.last_command_time = self.node.get_clock().now()
                     return True
                 else:
                     self.logger.error("Failed to send command to gripper hardware")
@@ -271,9 +296,9 @@ class OnRobotGripper:
                 self.simulate_movement(position, force)
                 return True
     
-    def send_gripper_command(self, position: int, force: int) -> bool:
+    def send_gripper_command(self, width_units: int, force_units: int) -> bool:
         """
-        Send command to real hardware.
+        Send command to real hardware using proper OnRobot protocol.
         Returns True if command was sent successfully.
         """
         if not self.client or not self.client.is_connected:
@@ -281,29 +306,26 @@ class OnRobotGripper:
             return False
         
         try:
-            # Try different command approaches for OnRobot compatibility
+            # According to documentation, we need to write to multiple registers:
+            # 1. Target width (0x0000) in 1/10 mm
+            # 2. Target force (0x0001) in N
+            # 3. Command (0x0003) with grip external command
             
-            # Approach 1: Write to command register (common for OnRobot)
-            success = self.client.write_single_register(0x1000, position)
-            if success:
-                self.logger.debug("Command sent successfully via single register")
+            # Write target width
+            success1 = self.client.write_single_register(self.REG_TARGET_WIDTH, width_units)
+            
+            # Write target force
+            success2 = self.client.write_single_register(self.REG_TARGET_FORCE, force_units)
+            
+            # Write command to start movement
+            success3 = self.client.write_single_register(self.REG_COMMAND, self.CMD_GRIP_EXTERNAL)
+            
+            if success1 and success2 and success3:
+                self.logger.debug("Gripper command sent successfully")
                 return True
-            
-            # Approach 2: Write position and force to consecutive registers
-            success = self.client.write_multiple_registers(0x1000, [position, force])
-            if success:
-                self.logger.debug("Command sent successfully via multiple registers")
-                return True
-                
-            # Approach 3: Try different register addresses
-            for addr in [0x0000, 0x2000, 0x3000]:
-                success = self.client.write_single_register(addr, position)
-                if success:
-                    self.logger.debug(f"Command sent successfully via register 0x{addr:04X}")
-                    return True
-            
-            self.logger.error("All command methods failed")
-            return False
+            else:
+                self.logger.error(f"Command failed: width={success1}, force={success2}, cmd={success3}")
+                return False
                 
         except Exception as e:
             self.logger.error(f"Error sending gripper command: {e}")
@@ -319,57 +341,53 @@ class OnRobotGripper:
             return True
         
         try:
-            # Try different register addresses for status reading
-            status_addresses = [0x0000, 0x1000, 0x2000]
-            
-            for addr in status_addresses:
-                status_data = self.client.read_holding_registers(addr, 3)  # Read status, position, force
+            # Read status register (0x0100)
+            status_data = self.client.read_holding_registers(self.REG_STATUS, 1)
+            if not status_data:
+                return False
                 
-                if status_data and len(status_data) >= 3:
-                    return self.parse_status_data(status_data)
+            status = status_data[0]
             
-            self.logger.warning("No status data received from any register")
-            return False
+            # Parse status bits
+            self.is_moving = (status & self.STATUS_BUSY) != 0
+            grip_detected = (status & self.STATUS_GRIP_DETECTED) != 0
+            error_calibration = (status & self.STATUS_ERROR_NOT_CALIBRATED) != 0
+            error_sensor = (status & self.STATUS_ERROR_LINEAR_SENSOR) != 0
+            
+            # Update readiness
+            self.is_ready = not (error_calibration or error_sensor)
+            
+            # Read current width (external width register 0x0101)
+            width_data = self.client.read_holding_registers(self.REG_EXTERNAL_WIDTH, 1)
+            if width_data:
+                # Convert from 1/10 mm to meters
+                width_units = width_data[0]
+                # Handle signed value for external width
+                if width_units & 0x8000:  # Check if negative (two's complement)
+                    width_units = -((width_units ^ 0xFFFF) + 1)
+                self.current_position = width_units / 10000.0  # Convert 1/10 mm to meters
+            
+            # Read current force (register 0x0107)
+            force_data = self.client.read_holding_registers(self.REG_FORCE, 1)
+            if force_data:
+                self.current_force = float(force_data[0])  # Force is in N
+            
+            # Check if we've reached target position (with tolerance)
+            if not self.is_moving and hasattr(self, 'target_position'):
+                tolerance = 0.002  # 2mm tolerance
+                if abs(self.current_position - self.target_position) < tolerance:
+                    self.is_moving = False
+            
+            # Log errors if any
+            if error_calibration:
+                self.logger.error("Gripper not calibrated!")
+            if error_sensor:
+                self.logger.error("Linear sensor error!")
+                
+            return True
                 
         except Exception as e:
             self.logger.error(f"Error reading gripper status: {e}")
-            return False
-    
-    def parse_status_data(self, data: list) -> bool:
-        """
-        Parse status data from gripper registers.
-        Updates internal state variables.
-        """
-        if len(data) >= 3:
-            try:
-                status = data[0]
-                position_raw = data[1]
-                force_raw = data[2]
-                
-                # Parse status bits (adjust based on actual protocol)
-                self.is_ready = (status & 0x01) != 0  # Ready flag
-                self.is_moving = (status & 0x02) != 0  # Moving flag
-                
-                # Convert raw values to physical units
-                self.current_position = self.units_to_meters(position_raw)
-                self.current_force = self.units_to_force(force_raw)
-                
-                # Check if we've reached target position (with tolerance)
-                if not self.is_moving and hasattr(self, 'target_position'):
-                    tolerance = 0.002  # 2mm tolerance
-                    if abs(self.current_position - self.target_position) < tolerance:
-                        self.is_moving = False
-                
-                self.logger.debug(f"Status: ready={self.is_ready}, moving={self.is_moving}, "
-                                f"position={self.current_position:.3f}m, force={self.current_force:.1f}N")
-                
-                return True
-                
-            except Exception as e:
-                self.logger.error(f"Error parsing status data: {e}")
-                return False
-        else:
-            self.logger.warning(f"Invalid status data length: {len(data)}")
             return False
     
     def simulate_movement(self, target_position: float, force: float = 50.0):
@@ -457,33 +475,18 @@ class OnRobotGripper:
     
     def meters_to_units(self, meters: float) -> int:
         """
-        Convert meters to gripper units (0-255).
+        Convert meters to gripper units (1/10 mm).
         """
-        if self.max_width == self.min_width:
-            return 0
-        normalized = (meters - self.min_width) / (self.max_width - self.min_width)
-        return int(normalized * 255)
+        mm = meters * 1000.0  # Convert to mm
+        tenth_mm = int(mm * 10.0)  # Convert to 1/10 mm
+        return max(0, min(0xFFFF, tenth_mm))  # Clamp to valid range
     
     def units_to_meters(self, units: int) -> float:
         """
-        Convert gripper units (0-255) to meters.
+        Convert gripper units (1/10 mm) to meters.
         """
-        normalized = units / 255.0
-        return self.min_width + normalized * (self.max_width - self.min_width)
-    
-    def force_to_units(self, force: float) -> int:
-        """
-        Convert force (N) to gripper units (0-255).
-        """
-        normalized = force / self.max_force
-        return int(normalized * 255)
-    
-    def units_to_force(self, units: int) -> float:
-        """
-        Convert gripper units (0-255) to force (N).
-        """
-        normalized = units / 255.0
-        return normalized * self.max_force
+        mm = units / 10.0  # Convert to mm
+        return mm / 1000.0  # Convert to meters
     
     def update_callback(self):
         """
@@ -496,8 +499,12 @@ class OnRobotGripper:
                 if not self.simulation_mode:
                     self.logger.warning("Failed to read gripper status")
             
-            # Update last update time
-            self.last_update_time = self.node.get_clock().now()
+            # Check for command timeout
+            if self.is_moving and not self.simulation_mode:
+                time_since_command = (self.node.get_clock().now() - self.last_command_time).nanoseconds / 1e9
+                if time_since_command > self.command_timeout:
+                    self.logger.warning("Gripper command timeout - stopping movement")
+                    self.stop()
             
         except Exception as e:
             self.logger.error(f"Error in update callback: {e}")
@@ -508,6 +515,15 @@ class OnRobotGripper:
         """
         with self.lock:
             self.is_moving = False
+            
+            # Send stop command to hardware if connected
+            if not self.simulation_mode and self.client and self.client.is_connected:
+                try:
+                    self.client.write_single_register(self.REG_COMMAND, self.CMD_STOP)
+                    self.logger.info("Stop command sent to gripper")
+                except Exception as e:
+                    self.logger.error(f"Failed to send stop command: {e}")
+            
             self.logger.info("Gripper movement stopped")
     
     def disconnect(self):
@@ -532,15 +548,6 @@ class OnRobotGripper:
         """
         self.logger.warning("EMERGENCY STOP triggered")
         self.stop()
-        
-        # If connected to hardware, send emergency stop command
-        if not self.simulation_mode and self.client and self.client.is_connected:
-            try:
-                # Try to send emergency stop command
-                self.client.write_single_register(0x0000, 0x0000)  # Common emergency stop register
-                self.logger.info("Emergency stop command sent to hardware")
-            except Exception as e:
-                self.logger.error(f"Failed to send emergency stop command: {e}")
     
     def get_status_dict(self) -> dict:
         """

@@ -10,7 +10,7 @@ class ModbusTCPClient:
     Based on actual Modbus TCP standard with proper error handling.
     """
     
-    def __init__(self, ip: str = "192.168.1.1", port: int = 502, unit_id: int = 1, timeout: float = 5.0):
+    def __init__(self, ip: str = "192.168.1.1", port: int = 502, unit_id: int = 65, timeout: float = 5.0):
         self.ip = ip
         self.port = port
         self.unit_id = unit_id
@@ -82,6 +82,11 @@ class ModbusTCPClient:
         # Parse PDU
         function_code = response[7]
         if function_code != expected_function:
+            # Check for error response
+            if function_code == expected_function + 0x80:
+                error_code = response[8] if len(response) > 8 else 0
+                print(f"❌ Modbus error response: code {error_code}")
+                return None
             print(f"❌ Function code mismatch: expected {expected_function}, got {function_code}")
             return None
         
@@ -103,6 +108,14 @@ class ModbusTCPClient:
                     values.append(value)
             return values
             
+        elif expected_function == 0x06:  # Write Single Register
+            # Response should echo the request
+            if len(response) >= 6:
+                address = struct.unpack('>H', response[8:10])[0]
+                value = struct.unpack('>H', response[10:12])[0]
+                return [address, value]
+            return None
+            
         elif expected_function == 0x10:  # Write Multiple Registers
             # Response should be: [transaction, protocol, length, unit_id, function, address, quantity]
             if len(response) >= 12:
@@ -115,7 +128,6 @@ class ModbusTCPClient:
     def read_holding_registers(self, address: int, count: int) -> Optional[List[int]]:
         """
         Read holding registers (function 0x03).
-        Try different register mappings for OnRobot grippers.
         """
         if not self.is_connected:
             return None
@@ -128,7 +140,7 @@ class ModbusTCPClient:
                 
                 # Send and receive
                 self.socket.sendall(frame)
-                response = self.socket.recv(256)  # Modbus responses are typically small
+                response = self.socket.recv(256)
                 
                 return self._parse_modbus_response(response, 0x03)
                 
@@ -139,10 +151,34 @@ class ModbusTCPClient:
                 print(f"❌ Error reading holding registers: {e}")
                 return None
     
+    def write_single_register(self, address: int, value: int) -> bool:
+        """
+        Write single register (function 0x06).
+        """
+        if not self.is_connected:
+            return False
+        
+        with self.lock:
+            try:
+                data = struct.pack('>HH', address, value)
+                frame = self._create_modbus_frame(0x06, data)
+                
+                self.socket.sendall(frame)
+                response = self.socket.recv(256)
+                
+                result = self._parse_modbus_response(response, 0x06)
+                return result is not None
+                
+            except socket.timeout:
+                print(f"⏰ Timeout writing single register at address 0x{address:04X}")
+                return False
+            except Exception as e:
+                print(f"❌ Error writing single register: {e}")
+                return False
+
     def write_multiple_registers(self, address: int, values: List[int]) -> bool:
         """
         Write multiple registers (function 0x10).
-        Used for commanding the gripper.
         """
         if not self.is_connected:
             return False
@@ -171,31 +207,6 @@ class ModbusTCPClient:
                 return False
             except Exception as e:
                 print(f"❌ Error writing registers: {e}")
-                return False
-    
-    def write_single_register(self, address: int, value: int) -> bool:
-        """
-        Write single register (function 0x06).
-        """
-        if not self.is_connected:
-            return False
-        
-        with self.lock:
-            try:
-                data = struct.pack('>HH', address, value)
-                frame = self._create_modbus_frame(0x06, data)
-                
-                self.socket.sendall(frame)
-                response = self.socket.recv(256)
-                
-                # For function 0x06, response should echo the request
-                return len(response) >= 8
-                
-            except socket.timeout:
-                print(f"⏰ Timeout writing single register at address 0x{address:04X}")
-                return False
-            except Exception as e:
-                print(f"❌ Error writing single register: {e}")
                 return False
 
     def scan_registers(self, start_addr: int = 0, count: int = 10) -> dict:
